@@ -16,8 +16,12 @@ library(EnsDb.Hsapiens.v79)
 library(AnnotationDbi)
 
 # Read in the adat file and BBID file
-adat_bbid <- fread("/usr4/spclpgm/hpenn13/LabadorfRotation/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
-adat <- SomaDataIO::read_adat("/restricted/projectnb/cteseq/data/somascan_2024/CTE Somascan/HMS-24-036_2024-08-09/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP.adat")
+adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan_analysis/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
+adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan_analysis/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
+dim(adat)
+
+#remove non-human samples
+adat <- adat[,which(colData(adat)$Organism == "Human")]
 dim(adat)
 
 #get rid of non-human samples - removes 298 columns
