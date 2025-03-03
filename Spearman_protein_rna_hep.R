@@ -19,6 +19,7 @@ library(limma)
 library(DESeq2)
 library(tidyr)
 library(purrr)
+library(tidyverse)
 
 # Read in the adat file and metadata file
 adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan_analysis/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
@@ -95,6 +96,7 @@ adat_rna <- dplyr::inner_join(adat_df, vst_rna,by=c("geneName"="gene_name"), rel
 
 #create rowData file to incorporate into lm model
 rowData <- data.frame(Core_ID = colData(adat)$Core_ID, Batch = colData(adat)$Batch, RIN = colData(adat)$RIN)
+
 #combine all data needed for lm model using tidyverse
 # Pivot to long format
 adat_rna_long <- adat_rna %>%
@@ -105,35 +107,9 @@ head(adat_rna_long)
 adat_rna_long <- adat_rna_long[which(is.na(adat_rna_long$`NA`)),]
 adat_rna_long <- adat_rna_long[,-6]
 
-
 # Merge with metadata
 adat_rna_long <- adat_rna_long %>%
   left_join(rowData, by = c("Sample" = "Core_ID"))
-
-# Run linear model
-SeqIDs <- unique(adat_rna_long$SeqID)
-gene_ids <- unique(adat_rna_long$gene_id)
-
-results_list <- list()
-
-for(i in 1:length(SeqIDs)){
-  adat_rna_long_seqID <- adat_rna_long[which(adat_rna_long$SeqID == SeqIDs[i]),]
-  for(j in 1:length(gene_ids)){
-    adat_rna_long_seqID_geneid <- adat_rna_long_seqID[which(adat_rna_long_seqID$gene_id == gene_ids[j]),]
-    model <- lm(p ~ r + Batch + RIN, data = adat_rna_long_seqID_geneid)
-    # Get the summary
-    model_summary <- summary(model)
-    # Extract coefficients (beta values) and p-values
-    coef_table <- as.data.frame(coef(model_summary))  # Convert coefficients to a data frame
-    colnames(coef_table) <- c("Beta", "Std_Error", "t_value", "p_value")
-    coef_table$gene <- paste0(adat_rna_long_seqID_geneid$SeqID[1],"_",adat_rna_long_seqID_geneid$gene_id[1])
-    coef_table$Variable <- rownames(coef_table)  # Keep track of variables
-    
-    # Store results
-    results_list[[gene]] <- coef_table
-  }
-}
-final_results <- bind_rows(results_list)
 
 # Run lm() separately for each Gene-Protein combination
 final_results <- adat_rna_long %>%
@@ -146,51 +122,34 @@ final_results <- adat_rna_long %>%
     coef_table = map2(SeqID, coef_table, ~ mutate(.y, SeqID = .x, Variable = rownames(.y)))
   ) %>%
   ungroup() %>%
-  select(SeqID, gene_id, coef_table) %>%  # Keep relevant columns
   unnest(coef_table)  # Flatten nested structure
 
-# Rename columns for clarity
-colnames(final_results) <- c("SeqID", "gene_id", "Variable", "Beta", "Std_Error", "t_value", "p_value")
+final_results <- as_tibble(final_results)
+final_results <- final_results[,-1]
+final_results <- final_results %>% unnest(coef_table)
 
-# Save to CSV
-write.csv(final_results, "lm_results_by_rna_protein.csv", row.names = FALSE)
+#prep file for histogram (beta 1 - slope)
+hist_results <- as.data.frame(final_results[,c(1,5,8,9,10)])
+hist_results <- hist_results[which(hist_results$Variable == "r"),]
+head(hist_results)
 
-# View results
-head(final_results)
+hist(hist_results$Estimate,
+     main="Range in Beta values (Slope) for Protein vs Expression CTE data",
+     ylab="Beta 1 (Slope)",
+     xlab="Expression and Protein Combinations",
+     col="darkmagenta",
+     freq=FALSE
+)
 
-library(lme4)
+#prep file for histogram (beta 0 - intercept)
+hist_results <- as.data.frame(final_results[,c(1,5,8,9,10)])
+hist_results <- hist_results[which(hist_results$Variable == "(Intercept)"),]
+head(hist_results)
 
-model <- lmer(p ~ r + Batch + RIN + (1 | SeqID) + (1 | gene_id), data = adat_rna_long)
-
-# Save to CSV
-write.csv(final_results, "lm_results.csv", row.names = FALSE)
-model <- lm(p ~ r + Batch + RIN, data = adat_rna_long)
-summary(model)
-# Get the summary
-model_summary <- summary(model)
-
-# Extract coefficients (beta values) and p-values
-coef_table <- as.data.frame(coef(model_summary))  # Convert coefficients to a data frame
-colnames(coef_table) <- c("Beta", "Std_Error", "t_value", "p_value")
-
-#Spearman correlation code
-#Calculate correlations for each analyte
-common_genes <- intersect(rownames(adat_df), rownames(trna))
-
-# Subset data to common genes
-adat_df <- adat_df[common_genes, ]
-trna <- trna[common_genes, ]
-
-# Function to calculate Spearman correlation for each gene
-compute_spearman <- function(gene) {
-  cor.test(adat_df[gene, ], trna[gene, ], method = "spearman")$estimate
-}
-
-# Apply function to each gene
-spearman_results <- sapply(common_genes, compute_spearman)
-
-# Convert to data frame for easier visualization
-spearman_df <- data.frame(Gene = common_genes, Spearman_Correlation = spearman_results)
-
-# View results
-head(spearman_df)
+hist(hist_results$Estimate,
+     main="Range in Beta values (Intercept) for Protein vs Expression CTE data",
+     ylab="Beta 0 (Intercept)",
+     xlab="Expression and Protein Combinations",
+     col="darkmagenta",
+     freq=FALSE
+)
