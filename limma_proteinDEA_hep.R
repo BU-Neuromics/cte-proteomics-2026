@@ -99,3 +99,24 @@ PDCD6IP_AT8 <- data.frame(counts = protein_counts, AT8 = protein_AT8)
 #create scatter plot
 ggplot(PDCD6IP_AT8, aes(x=AT8, y=counts)) + 
   geom_point()
+
+#####################
+#Dkk-4
+protein_index <- which(rowData(adat)$EntrezGeneSymbol == "DKK4")
+protein_index
+#grab counts for C1QTNF5
+protein_counts <- assays(adat)$counts[c(protein_index),]
+
+#grab AT8 total for C1QTNF5
+protein_AT8 <- colData(adat)$AT8_total
+
+#check lengths 
+length(protein_counts) == 2*length(protein_AT8)
+
+DKK4_AT8 <- data.frame(counts1 = protein_counts[1,],counts2 = protein_counts[2,], AT8 = protein_AT8)
+
+#create scatter plot
+ggplot(DKK4_AT8, aes(x=AT8, y=counts1)) + 
+  geom_point()
+ggplot(DKK4_AT8, aes(x=AT8, y=counts2)) + 
+  geom_point()

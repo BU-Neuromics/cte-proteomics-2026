@@ -83,17 +83,27 @@ vst_rna$gene_name <- mapIds(edb, keys = vst_rna$gene_name, keytype = "GENEID", c
 vst_rna <- vst_rna[which(!is.na(vst_rna$gene_name)),]
 vst_rna$gene_id <- rownames(vst_rna)
 head(vst_rna)
-
+dim(vst_rna) #56462
+length(unique(vst_rna$gene_name)) #54580
 #convert adat data into data frame 
+dim(adat) #7285
 adat_df <- as.data.frame(assays(adat)$counts)
 colnames(adat_df) <- colData(adat)$Core_ID
 rownames(adat_df) <- rowData(adat)$SeqId
 adat_df$SeqID <- rowData(adat)$SeqId
 adat_df$geneName <- rowData(adat)$EntrezGeneSymbol
-
+adat_df <- adat_df %>%
+  separate_rows(geneName, sep = "\\|")
+dim(adat_df) #7393
+length(unique(adat_df$geneName)) #6417
+length(unique(adat_df$SeqID)) #7285
 #inner join adat and rna files
 adat_rna <- dplyr::inner_join(adat_df, vst_rna,by=c("geneName"="gene_name"), relationship = "many-to-many",suffix = c(".p", ".r"))
-
+dim(adat_rna) #6926 -> 7107
+length(unique(adat_rna$SeqID)) #6988
+length(unique(adat_rna$gene_id)) #6140
+length(unique(adat_rna$geneName)) #6119
+adat_df$geneName[c(which(!adat_df$geneName %in% adat_rna$geneName))]
 #create rowData file to incorporate into lm model
 rowData <- data.frame(Core_ID = colData(adat)$Core_ID, Batch = colData(adat)$Batch, RIN = colData(adat)$RIN)
 
@@ -121,8 +131,7 @@ final_results <- adat_rna_long %>%
     coef_table = map(summary, ~ as.data.frame(coef(.x))),
     coef_table = map2(SeqID, coef_table, ~ mutate(.y, SeqID = .x, Variable = rownames(.y)))
   ) %>%
-  ungroup() %>%
-  unnest(coef_table)  # Flatten nested structure
+  ungroup()
 
 final_results <- as_tibble(final_results)
 final_results <- final_results[,-1]
@@ -132,13 +141,23 @@ final_results <- final_results %>% unnest(coef_table)
 hist_results <- as.data.frame(final_results[,c(1,5,8,9,10)])
 hist_results <- hist_results[which(hist_results$Variable == "r"),]
 head(hist_results)
+hist_results <- arrange(hist_results, `Pr(>|t|)`)
+hist_results <- dplyr::mutate(hist_results,
+                              padj=p.adjust(`Pr(>|t|)`, method = "fdr"))
+
+pivot_final_results <- pivot_wider(final_results,
+            id_cols = c("gene_id","SeqID"),
+            names_from = c("Variable"),
+            values_from = c("Estimate"))
+plot(pivot_final_results$`(Intercept)`,pivot_final_results$r)
 
 hist(hist_results$Estimate,
      main="Range in Beta values (Slope) for Protein vs Expression CTE data",
      ylab="Beta 1 (Slope)",
      xlab="Expression and Protein Combinations",
      col="darkmagenta",
-     freq=FALSE
+     freq=FALSE,
+     breaks=100
 )
 
 #prep file for histogram (beta 0 - intercept)
@@ -153,3 +172,110 @@ hist(hist_results$Estimate,
      col="darkmagenta",
      freq=FALSE
 )
+
+################################################################################
+#Follow-up
+vst_rna$median <- apply(vst_rna, 1, median, na.rm=T)
+rna_median <- data.frame(gene_id = rownames(vst_rna), median = vst_rna$median)
+results_rnaMedian_merge <- merge(rna_median,hist_results, by = "gene_id")
+ggplot(results_rnaMedian_merge, aes(x=Estimate, y=median)) + 
+  geom_point() +
+  theme(axis.text.y = element_text())
+plot(results_rnaMedian_merge$Estimate,results_rnaMedian_merge$median)
+
+#which beta r are significant (FDR < 0.05)
+sig_hist_results <- hist_results[which(hist_results$`Pr(>|t|)` < 0.05),]
+nrow(sig_hist_results)
+
+#scatterplots
+Scatterplots <- function(index_r, index_p, vst_rna, adat_df){
+  rna <- as.data.frame(t(vst_rna[index_r,]))
+  protein <- as.data.frame(t(adat_df[index_p,]))
+  name_r <- colnames(rna)
+  name_p <- colnames(protein)
+  rna$samples <- rownames(rna)
+  protein$samples <- rownames(protein)
+  scatterplot_rp <- merge(rna, protein, by = "samples")
+  colnames(scatterplot_rp) <- c("samples","rna","protein")
+  scatter <- ggplot(scatterplot_rp, aes(x = as.numeric(rna), y = as.numeric(protein))) +
+    geom_point() +
+    labs(title = paste(name_r,' and ',name_p,' RNA/Protein Comparison'), x = "RNA", y = "Protein") +
+    geom_smooth(method = "lm")
+  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/results/proteinRNA_mostsig_',name_r,'_',name_p,'_scatterplot.png'), plot = scatter, width = 8, height = 6)
+}
+#smallest p value
+index_r <- which(rownames(vst_rna) == "ENSG00000134184.13")
+index_p <- which(rownames(adat_df) == "15395-15")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+which(rownames(assays(adat)$counts) == "seq.15395.15")
+separation <- as.data.frame(colData(adat))
+separation <- t(separation)
+counts <- assays(adat)$counts[1663,]
+counts <- t(as.data.frame(counts))
+plot(separation$V1,separation$Optic.nerve)
+
+separation <- merge(counts,separation, by = "row.names")
+dim(separation)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000164308.17")
+index_p <- which(rownames(adat_df) == "8960-3")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000134184.13")
+index_p <- which(rownames(adat_df) == "7239-9")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000197705.10")
+index_p <- which(rownames(adat_df) == "24903-7")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000133433.11")
+index_p <- which(rownames(adat_df) == "11273-176")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+#tau
+index_r <- which(vst_rna$gene_name == "MAPT")
+index_p <- which(adat_df$geneName == "MAPT")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+#APOE
+index_r <- which(rownames(vst_rna) == "ENSG00000130203.10")
+index_p <- which(adat_df$SeqID == "2418-55")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000130203.10")
+index_p <- which(rownames(adat_df) == "2937-10")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000130203.10")
+index_p <- which(rownames(adat_df) == "2938-55")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+index_r <- which(rownames(vst_rna) == "ENSG00000130203.10")
+index_p <- which(rownames(adat_df) == "5312-49")
+Scatterplots(index_r, index_p, vst_rna, adat_df)
+
+dim(hist_results)
+length(unique(hist_results$gene_id))
+length(unique(hist_results$SeqID))
+head(vst_rna)
+which(vst_rna$gene_name == "MAPT")
+which(hist_results$gene_id == "ENSG00000130203.10")
+
+duplicates_geneid <- subset(as.data.frame(table(hist_results$gene_id)),Freq > 1)
+duplicates_seqid <- subset(as.data.frame(table(hist_results$SeqID)),Freq >1)
+nrow(duplicates_geneid)
+nrow(duplicates_seqid)
+
+adatRNA_dups <- data.frame(SeqID = adat_rna$SeqID,gene_id = adat_rna$gene_id,geneName = adat_rna$geneName)
+adatRNA_dups <- adatRNA_dups[order(adatRNA_dups$geneName), ] 
+adatRNA_dups <- adatRNA_dups[which(duplicated(adatRNA_dups$geneName) | duplicated(adatRNA_dups$geneName, fromLast = TRUE)),]
+adatRNA_dups3 <- adatRNA_dups %>%
+  dplyr::group_by(geneName) %>%
+  dplyr::filter(n() > 2) %>%
+  dplyr::ungroup()
+adatRNA_dups3 <- adatRNA_dups3[which(duplicated(adatRNA_dups3$gene_id) | duplicated(adatRNA_dups3$gene_id, fromLast = TRUE)),]
+adatRNA_dups3 <- adatRNA_dups3[which(duplicated(adatRNA_dups3$SeqID) | duplicated(adatRNA_dups3$SeqID, fromLast = TRUE)),]
+print(adatRNA_dups3, n=75)
+write.csv(adatRNA_dups3, '/restricted/projectnb/cteseq/projects/somascan_analysis/RNAvsProteinAnalysis/RNA_Protein_DuplicateGroups.csv')
