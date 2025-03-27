@@ -1,4 +1,9 @@
 # hp_rotation
-SomaScan_totyrs_AT8_Spearman.R - preliminary analysis using SomaScan workflow to determine spearman correlations based on total years of play and AT8 total. Analyses include all 212 samples, not removing outlier samples or samples not included in metadata. Proteins are also not fully filtered. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/spearman
-Creating_SummarizedExperiment_hep.R - Adat data fully filtered and converted to summarized experiment format. All following analyses done using this data file found here: /restricted/projectnb/cteseq/projects/somascan/data and pca plot to identify outliers done in this file and found here: /restricted/projectnb/cteseq/projects/somascan/results
-identifying_adat_duplicates_hep.R - Idenitfies duplicates in SomaScan protein data and produces barplot and table. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/lm
+# SomaScan_totyrs_AT8_Spearman.R 
+preliminary analysis using SomaScan workflow to determine spearman correlations based on total years of play and AT8 total. Analyses include all 212 samples, not removing outlier samples or samples not included in metadata. Proteins are also not fully filtered. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/spearman
+
+# Creating_SummarizedExperiment_hep.R 
+Adat data fully filtered and converted to summarized experiment format. All following analyses done using this data file found here: /restricted/projectnb/cteseq/projects/somascan/data and pca plot to identify outliers done in this file and found here: /restricted/projectnb/cteseq/projects/somascan/results
+
+# identifying_adat_duplicates_hep.R 
+Idenitfies duplicates in SomaScan protein data and produces barplot and table. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/lm
