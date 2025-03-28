@@ -7,3 +7,6 @@ Adat data fully filtered and converted to summarized experiment format. All foll
 
 # identifying_adat_duplicates_hep.R 
 Idenitfies duplicates in SomaScan protein data and produces barplot and table. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/lm
+
+# limma_proteinDEA_hep.R
+Runs limma DEA for AT8_total + age_at_death and spot checks top significant proteins and a top significant gene from previous analysis to verify accuracy of our method before expanding to other models. Outputs here: /restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks
