@@ -22,12 +22,11 @@ library(purrr)
 library(tidyverse)
 
 # Read in the adat file and metadata file
-adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan_analysis/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
+adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
 dim(adat)
 metadata <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.csv")
 rna <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/all_counts.csv")
-adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan_analysis/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
-#adat <- adat[-grep("Internal Use Only", rowData(adat)$TargetFullName), ] #7313 (-283)
+adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
 adat <- adat[,which(colData(adat)$SampleGroup != "K-39")]
 adat <- adat[,which(colData(adat)$SampleGroup != "K-122")]
 adat <- adat[,which(colData(adat)$SampleGroup != "K-84")]
@@ -136,22 +135,25 @@ final_results <- adat_rna_long %>%
 final_results <- as_tibble(final_results)
 final_results <- final_results[,-1]
 final_results <- final_results %>% unnest(coef_table)
+final_results_df <- as.data.frame(final_results[,-c(2:4)])
+write.csv(final_results_df, paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/RNA_protein_comparisons.csv'))
 
 #prep file for histogram (beta 1 - slope)
-hist_results <- as.data.frame(final_results[,c(1,5,8,9,10)])
-hist_results <- hist_results[which(hist_results$Variable == "r"),]
-head(hist_results)
-hist_results <- arrange(hist_results, `Pr(>|t|)`)
-hist_results <- dplyr::mutate(hist_results,
+hist_results1 <- as.data.frame(final_results[,c(1,5,8,9,10)])
+hist_results1 <- hist_results1[which(hist_results1$Variable == "r"),]
+head(hist_results1)
+hist_results1 <- arrange(hist_results1, `Pr(>|t|)`)
+hist_results1 <- dplyr::mutate(hist_results1,
                               padj=p.adjust(`Pr(>|t|)`, method = "fdr"))
-
+write.csv(hist_results1, paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/RNA_protein_Beta1RNA_comparisons.csv'))
 pivot_final_results <- pivot_wider(final_results,
             id_cols = c("gene_id","SeqID"),
             names_from = c("Variable"),
             values_from = c("Estimate"))
 plot(pivot_final_results$`(Intercept)`,pivot_final_results$r)
 
-hist(hist_results$Estimate,
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/lm_beta1RNAhistogram_RNAprotein.png'))
+hist(hist_results1$Estimate,
      main="Range in Beta values (Slope) for Protein vs Expression CTE data",
      ylab="Beta 1 (Slope)",
      xlab="Expression and Protein Combinations",
@@ -159,32 +161,33 @@ hist(hist_results$Estimate,
      freq=FALSE,
      breaks=100
 )
+dev.off()
 
 #prep file for histogram (beta 0 - intercept)
-hist_results <- as.data.frame(final_results[,c(1,5,8,9,10)])
-hist_results <- hist_results[which(hist_results$Variable == "(Intercept)"),]
-head(hist_results)
+hist_results0 <- as.data.frame(final_results[,c(1,5,8,9,10)])
+hist_results0 <- hist_results0[which(hist_results0$Variable == "(Intercept)"),]
+head(hist_results0)
+write.csv(hist_results0, paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/RNA_protein_Beta0_comparisons.csv'))
 
-hist(hist_results$Estimate,
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/lm_beta0histogram_RNAprotein.png'))
+hist(hist_results0$Estimate,
      main="Range in Beta values (Intercept) for Protein vs Expression CTE data",
      ylab="Beta 0 (Intercept)",
      xlab="Expression and Protein Combinations",
      col="darkmagenta",
      freq=FALSE
 )
-
+dev.off()
 ################################################################################
 #Follow-up
 vst_rna$median <- apply(vst_rna, 1, median, na.rm=T)
 rna_median <- data.frame(gene_id = rownames(vst_rna), median = vst_rna$median)
-results_rnaMedian_merge <- merge(rna_median,hist_results, by = "gene_id")
-ggplot(results_rnaMedian_merge, aes(x=Estimate, y=median)) + 
-  geom_point() +
-  theme(axis.text.y = element_text())
+results_rnaMedian_merge <- merge(rna_median,hist_results1, by = "gene_id")
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/MedianScatterplot_followUp_RNAbeta1.png'))
 plot(results_rnaMedian_merge$Estimate,results_rnaMedian_merge$median)
-
+dev.off()
 #which beta r are significant (FDR < 0.05)
-sig_hist_results <- hist_results[which(hist_results$`Pr(>|t|)` < 0.05),]
+sig_hist_results <- hist_results1[which(hist_results1$`Pr(>|t|)` < 0.05),]
 nrow(sig_hist_results)
 
 #scatterplots
@@ -201,7 +204,7 @@ Scatterplots <- function(index_r, index_p, vst_rna, adat_df){
     geom_point() +
     labs(title = paste(name_r,' and ',name_p,' RNA/Protein Comparison'), x = "RNA", y = "Protein") +
     geom_smooth(method = "lm")
-  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/results/proteinRNA_mostsig_',name_r,'_',name_p,'_scatterplot.png'), plot = scatter, width = 8, height = 6)
+  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/lm/proteinRNA_mostsig_',name_r,'_',name_p,'_scatterplot.png'), plot = scatter, width = 8, height = 6)
 }
 #smallest p value
 index_r <- which(rownames(vst_rna) == "ENSG00000134184.13")

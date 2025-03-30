@@ -14,13 +14,14 @@ library(SummarizedExperiment)
 library(fgsea)
 library(qusage)
 library(gt)
+library(tidyr)
 
 # Read in the adat file and metadata file
-adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan_analysis/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
+adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
 metadata <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.csv")
 rna <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/all_counts.csv")
-adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan_analysis/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
-C2_genesets <- read.gmt("/restricted/projectnb/cteseq/projects/somascan_analysis/data/c2.all.v2024.1.Hs.symbols.gmt")
+adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
+C2_genesets <- read.gmt("/restricted/projectnb/cteseq/projects/somascan/data/data/c2.all.v2024.1.Hs.symbols.gmt")
 adat <- adat[-grep("Internal Use Only", rowData(adat)$TargetFullName), ] #7313 (-283)
 adat <- adat[,which(colData(adat)$SampleGroup != "K-39")]
 adat <- adat[,which(colData(adat)$SampleGroup != "K-122")]
@@ -47,11 +48,11 @@ limma_model <- function(model,adat, name, coefficient,genes) {
   #volcano plot
   fit$unique_names <- rownames(fit)
   fit <- merge(fit, genes, by.x = "unique_names", by.y="unique_names")
-  png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/volcano_plots/limma_DEA_',name,'_volcanoplot.png'))
+  png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/volcano_plots/limma_DEA_',name,'_volcanoplot.png'))
   volcanoplot(elimma,coef=coefficient,highlight=20,names=fit$genes, col="red",main=name)
   dev.off()
   volcanoplot(elimma,coef=coefficient,highlight=20,names=fit$genes, col="red",main=name)
-  write.csv(limma_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_',name,'_results.csv'))
+  write.csv(limma_res, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/limma_DEA_',name,'_results.csv'))
   return(limma_res_all)
 }
 fgsea_function <- function(limma_res_all,C2_genesets,name){
@@ -93,15 +94,12 @@ fgsea_function <- function(limma_res_all,C2_genesets,name){
   topPathwaysUp <- fgseaRes[ES > 0][head(order(pval), n=10), pathway]
   topPathwaysDown <- fgseaRes[ES < 0][head(order(pval), n=10), pathway]
   topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
-  #png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/gseaPlots/limma_DEA_',name,'_gseaPlot.png'))
   gseaTable <- plotGseaTable(final_list[topPathways], stats, fgseaRes, 
                 gseaParam=0.5)
-  #dev.off()
-  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/gseaPlots/limma_DEA_',name,'_gseaPlot.png'), plot = gseaTable, width = 8, height = 6)
-  #final_results <- as_tibble(final_results)
-  #final_results <- final_results[,-1]
-  #final_results <- final_results %>% unnest(coef_table)
-  #write.csv(fgseaRes, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_',name,'_gseaResults.csv'))
+  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/fgsea/gseaPlots/limma_DEA_',name,'_gseaPlot.png'), plot = gseaTable, width = 8, height = 6)
+  final_results <- as_tibble(fgseaRes)
+  final_results <- final_results %>% unnest(leadingEdge)
+  write.csv(final_results, paste0('/restricted/projectnb/cteseq/projects/somascan/results/fgsea/gseafiles/limma_DEA_',name,'_gseaResults.csv'))
   return(fgseaRes)
 }
 
@@ -124,7 +122,6 @@ AT8_res_all <- limma_model(AT8_model,adat_AT8_PathAD, "AT8_total","AT8_total",ge
 significance_table[1,2] <- length(which(AT8_res_all$P.Value < 0.05))
 significance_table[1,3] <- length(which(AT8_res_all$adj.P.Val < 0.05))
 AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total")
-write.csv(AT8_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_AT8_model_gseaResults.csv'))
 significance_table[1,4] <- length(which(AT8_fgsea_res$pval < 0.05))
 significance_table[1,5] <- length(which(AT8_fgsea_res$padj < 0.05))
 
@@ -137,7 +134,6 @@ AT8_PathAD_res_all <- limma_model(AT8_PathAD_model,adat_AT8_PathAD, "AT8_PathAD_
 significance_table[2,2] <- length(which(AT8_PathAD_res_all$P.Value < 0.05))
 significance_table[2,3] <- length(which(AT8_PathAD_res_all$adj.P.Val < 0.05))
 AT8_PathAD_fgsea_res <- fgsea_function(AT8_PathAD_res_all,C2_genesets,"AT8_PathAD_total")
-write.csv(AT8_PathAD_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_AT8_PathAD_model_gseaResults.csv'))
 significance_table[2,4] <- length(which(AT8_PathAD_fgsea_res$pval < 0.05))
 significance_table[2,5] <- length(which(AT8_PathAD_fgsea_res$padj < 0.05))
 
@@ -149,7 +145,6 @@ totyrs_res_all <- limma_model(totyrs_model,adat_totyrs, "totyrs","totyrs",genes)
 significance_table[3,2] <- length(which(totyrs_res_all$P.Value < 0.05))
 significance_table[3,3] <- length(which(totyrs_res_all$adj.P.Val < 0.05))
 totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs")
-write.csv(totyrs_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_totyrs_model_gseaResults.csv'))
 significance_table[3,4] <- length(which(totyrs_fgsea_res$pval < 0.05))
 significance_table[3,5] <- length(which(totyrs_fgsea_res$padj < 0.05))
 
@@ -161,7 +156,6 @@ totyrs_PathAD_res_all <- limma_model(totyrs_PathAD_model,adat_totyrs_PathAD, "to
 significance_table[4,2] <- length(which(totyrs_PathAD_res_all$P.Value < 0.05))
 significance_table[4,3] <- length(which(totyrs_PathAD_res_all$adj.P.Val < 0.05))
 totyrs_PathAD_fgsea_res <- fgsea_function(totyrs_PathAD_res_all,C2_genesets,"totyrs + PathAD")
-write.csv(totyrs_PathAD_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_totyrs_PathAD_model_gseaResults.csv'))
 significance_table[4,4] <- length(which(totyrs_PathAD_fgsea_res$pval < 0.05))
 significance_table[4,5] <- length(which(totyrs_PathAD_fgsea_res$padj < 0.05))
 
@@ -174,12 +168,6 @@ CTE_res_all <- limma_model(CTE_model,adat_CTE, "CTE","CTE",genes)
 significance_table[5,2] <- length(which(CTE_res_all$P.Value < 0.05))
 significance_table[5,3] <- length(which(CTE_res_all$adj.P.Val < 0.05))
 CTE_fgsea_res <- fgsea_function(CTE_res_all,C2_genesets,"CTE")
-CTE_fgsea_res <- CTE_fgsea_res[order(CTE_fgsea_res$padj), ] 
-CTE_fgsea_res <- CTE_fgsea_res[1:83,]
-pathway_lists <- frequency(CTE_fgsea_res$leadingEdge)
-pathway_dups <- subset(as.data.frame(table(CTE_fgsea_res$leadingEdge)),Freq >1)
-head(CTE_fgsea_res$leadingEdge)
-write.csv(CTE_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_CTE_model_gseaResults.csv'))
 significance_table[5,4] <- length(which(CTE_fgsea_res$pval < 0.05))
 significance_table[5,5] <- length(which(CTE_fgsea_res$padj < 0.05))
 
@@ -191,9 +179,6 @@ CTEStage_res_all <- limma_model(CTEStage_model,adat_CTEStage, "CTEStage","CTESta
 significance_table[6,2] <- length(which(CTEStage_res_all$P.Value < 0.05))
 significance_table[6,3] <- length(which(CTEStage_res_all$adj.P.Val < 0.05))
 CTEStage_fgsea_res <- fgsea_function(CTEStage_res_all,C2_genesets,"CTEStage")
-CTEStage_fgsea_res <- CTEStage_fgsea_res[order(CTEStage_fgsea_res$padj), ] 
-head(CTEStage_fgsea_res$leadingEdge)
-write.csv(CTEStage_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_CTEStage_model_gseaResults.csv'))
 significance_table[6,4] <- length(which(CTEStage_fgsea_res$pval < 0.05))
 significance_table[6,5] <- length(which(CTEStage_fgsea_res$padj < 0.05))
 
@@ -207,10 +192,10 @@ CTEonly_lowvshigh_res_all <- limma_model(CTEonly_lowvshigh_model,adat_CTEonly_lo
 significance_table[7,2] <- length(which(CTEonly_lowvshigh_res_all$P.Value < 0.05))
 significance_table[7,3] <- length(which(CTEonly_lowvshigh_res_all$adj.P.Val < 0.05))
 CTEonly_lowvshigh_fgsea_res <- fgsea_function(CTEonly_lowvshigh_res_all,C2_genesets,"Group_de")
-write.csv(CTEonly_lowvshigh_fgsea_res, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/limma_DEA_CTEonly_lowvshigh_model_gseaResults.csv'))
 significance_table[7,4] <- length(which(CTEonly_lowvshigh_fgsea_res$pval < 0.05))
 significance_table[7,5] <- length(which(CTEonly_lowvshigh_fgsea_res$padj < 0.05))
 
 significance_table %>%
   gt()
-write.csv(significance_table, paste0('/restricted/projectnb/cteseq/projects/somascan_analysis/limma_results/significant_limma_Proteins_Pathways_table.csv'))
+write.csv(significance_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/significant_limma_Proteins_Pathways_table.csv'))
+

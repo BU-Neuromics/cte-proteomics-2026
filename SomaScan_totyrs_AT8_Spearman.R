@@ -42,10 +42,14 @@ dim(adat)
 
 #Data Prep and Exploration
 summary(adat$totyrs)
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/totyrs_histogram_dist.png'))
 hist(adat$totyrs,
      xlab = "Total Years of Play",
      main = "Years Distribution"
 )
+dev.off()
+totyrs <- data.frame(sample = adat$SampleGroup, totyrs = adat$totyrs)
+write.csv(totyrs, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/totyrs_spearman.csv'))
 adat <- dplyr::filter(adat, !is.na(BBID))
 adat_totyrs <- dplyr::filter(adat, !is.na(totyrs))
 dim(adat_totyrs)
@@ -100,6 +104,7 @@ vol_plot <- cors_df %>%
        colour = "Protein Level Change")
 
 vol_plot
+ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/totyrs_adjpvalue_spearman.png'), plot = vol_plot, width = 8, height = 6)
 #p.value
 cors_df <- cors_df %>%
   mutate(protein_type = case_when(estimate.rho >= 0.3 & p.value <= 0.05 ~ "up",
@@ -122,13 +127,14 @@ vol_plot <- cors_df %>%
        colour = "Protein Level Change")
 
 vol_plot
-
+ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/totyrs_pvalue_spearman.png'), plot = vol_plot, width = 8, height = 6)
 top_posCor <- cors_df %>%
   dplyr::filter(p.value < 0.05) %>% # Retain significant cors only
   dplyr::filter(estimate.rho >= abs(0.19)) %>% # Retain strong correlations
   arrange(desc(estimate.rho))
 
 top_posCor
+write.csv(cors_df, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/results_file_totyrs_spearman.csv'))
 
 ###########################################################################
 #annotating results
@@ -154,20 +160,23 @@ go_terms <- AnnotationDbi::select(GO.db,
 final_totyrs_df <- left_join(go_anno, go_terms, by = c("GO" = "GOID"))
 
 final_totyrs_df
-
+write.csv(final_totyrs_df, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/results_file_totyrs_GO.csv'))
 #########################################################################
 #########################################################################
 
 # Total AT8 (tau)
-
 summary(adat$AT8_total)
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/AT8_total_histogram_dist.png'))
 hist(adat$AT8_total,
      xlab = "Total Tau",
      main = "Distribution"
 )
+dev.off()
 adat <- dplyr::filter(adat, !is.na(BBID))
 adat_AT8_total <- dplyr::filter(adat, !is.na(AT8_total))
 dim(adat_AT8_total)
+AT8_total <- data.frame(sample = adat_AT8_total$SampleGroup, AT8_total = adat_AT8_total$AT8_total)
+write.csv(AT8_total, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/AT8_total_spearman.csv'))
 analytes <- SomaDataIO::getAnalytes(adat_AT8_total)
 
 
@@ -221,7 +230,7 @@ vol_plot <- cors_df %>%
        colour = "Protein Level Change")
 
 vol_plot
-
+ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/AT8_total_adjpvalue_spearman.png'), plot = vol_plot, width = 8, height = 6)
 #look at rho abs > 0.5
 cors_df <- cors_df %>%
   mutate(protein_type = case_when(estimate.rho >= 0.5 & padj <= 0.05 ~ "up",
@@ -255,7 +264,7 @@ top_posCor <- cors_df %>%
   arrange(desc(estimate.rho))
 
 top_posCor
-
+write.csv(cors_df, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/results_file_AT8_total_spearman.csv'))
 ########################################################################
 #annotating results
 #all available annotations
@@ -280,3 +289,4 @@ go_terms <- AnnotationDbi::select(GO.db,
 final_AT8_df <- left_join(go_anno, go_terms, by = c("GO" = "GOID"))
 
 final_AT8_df
+write.csv(final_AT8_df, paste0('/restricted/projectnb/cteseq/projects/somascan/results/spearman/results_file_AT8_total_GO.csv'))

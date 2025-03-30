@@ -10,10 +10,11 @@ library(SomaDataIO)
 library(SomaScan.db)
 library(data.table)
 library(SummarizedExperiment)
+library(ggfortify)
 
 # Read in the adat file and BBID file
 adat <- SomaDataIO::read_adat("/restricted/projectnb/cteseq/data/somascan_2024/CTE Somascan/HMS-24-036_2024-08-09/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP.adat")
-adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan_analysis/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
+adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
 metadata <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.csv")
 dim(adat)
 adat <- log2(adat)
@@ -75,9 +76,9 @@ colData(adat_summarized_experiment)
 rowData(adat_summarized_experiment)
 
 #pca plot (at n=212) = not merged with metadata yet
-library(ggfortify)
 pca_res <- prcomp(t(assays(adat_summarized_experiment)$counts), scale. = TRUE)
-
+saveRDS(pca_res, file = "/restricted/projectnb/cteseq/projects/somascan/results/pcaplot_212samp_file.rds")
+png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/pcaplot_212samp.png'))
 autoplot(pca_res, data = colData(adat_summarized_experiment), label = TRUE, shape = FALSE,label.label = "SampleGroup", label.size = 3)
-
-saveRDS(adat_summarized_experiment, file = "/restricted/projectnb/cteseq/projects/somascan_analysis/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
+dev.off()
+saveRDS(adat_summarized_experiment, file = "/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
