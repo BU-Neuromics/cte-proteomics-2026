@@ -39,6 +39,7 @@ adat <- adat[,which(!is.na(colData(adat)$AT8_total))] #186
 #adat <- adat[,-173]
 dim(adat)
 adat <- adat[,which(colData(adat)$PathAD != 1)]
+colData(adat)$AT8_total <- log(colData(adat)$AT8_total)
 
 #differential expression analysis (Limma)
 #create design matrix and run limma
@@ -73,11 +74,11 @@ protein_AT8 <- colData(adat)$AT8_total
 #check lengths 
 length(protein_counts) == length(protein_AT8)
 
-C1QTNF5_AT8 <- data.frame(counts = protein_counts, AT8 = 10^protein_AT8)
+C1QTNF5_AT8 <- data.frame(counts = protein_counts, AT8 = protein_AT8)
 write.csv(C1QTNF5_AT8, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/C1QTNF5_AT8_spotcheck_unlogged_file.csv'))
 
 #create scatter plot
-C1QTNF5_scat <- ggplot(C1QTNF5_AT8, aes(x=AT8, y=counts)) + 
+C1QTNF5_scat <- ggplot(C1QTNF5_AT8, aes(x=counts, y=AT8)) + 
   geom_point()
 C1QTNF5_scat
 ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/C1QTNF5_AT8_spotcheck_scatterplot_unlogged_allpnts.png'), plot = C1QTNF5_scat, width = 8, height = 6)
@@ -97,10 +98,10 @@ protein_AT8 <- colData(adat)$AT8_total
 #check lengths 
 length(protein_counts) == length(protein_AT8)
 
-PDCD6IP_AT8 <- data.frame(counts = protein_counts, AT8 = 10^protein_AT8)
+PDCD6IP_AT8 <- data.frame(counts = protein_counts, AT8 = protein_AT8)
 write.csv(PDCD6IP_AT8, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/PDCD6IP_AT8_spotcheck_unlogged_file.csv'))
 #create scatter plot
-PDCD6IP_scat <- ggplot(PDCD6IP_AT8, aes(x=AT8, y=counts)) + 
+PDCD6IP_scat <- ggplot(PDCD6IP_AT8, aes(x=counts, y=AT8)) + 
   geom_point() + xlim(0,75)
 PDCD6IP_scat
 ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/PDCD6IP_AT8_spotcheck_unlogged_scatterplot.png'), plot = PDCD6IP_scat, width = 8, height = 6)
@@ -117,14 +118,14 @@ protein_AT8 <- colData(adat)$AT8_total
 #check lengths 
 length(protein_counts) == 2*length(protein_AT8)
 
-DKK4_AT8 <- data.frame(counts1 = protein_counts[1,],counts2 = protein_counts[2,], AT8 = 10^protein_AT8)
+DKK4_AT8 <- data.frame(counts1 = protein_counts[1,],counts2 = protein_counts[2,], AT8 = protein_AT8)
 write.csv(DKK4_AT8, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/DKK4_AT8_spotcheck_unlogged_file.csv'))
 #create scatter plot
-DKK4a_scat <- ggplot(DKK4_AT8, aes(x=AT8, y=counts1)) + 
+DKK4a_scat <- ggplot(DKK4_AT8, aes(x=counts1, y=AT8)) + 
   geom_point() +xlim(0,50)
 DKK4a_scat
 ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/DKK4a_AT8_spotcheck_unlogged_scatterplot.png'), plot = DKK4a_scat, width = 8, height = 6)
-DKK4b_scat <- ggplot(DKK4_AT8, aes(x=AT8, y=counts2)) + 
+DKK4b_scat <- ggplot(DKK4_AT8, aes(x=counts2, y=AT8)) + 
   geom_point() + xlim(0,50)
 DKK4b_scat
 ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/AT8_spotchecks/DKK4b_AT8_spotcheck_unlogged_scatterplot.png'), plot = DKK4b_scat, width = 8, height = 6)
