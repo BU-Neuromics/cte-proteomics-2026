@@ -39,7 +39,7 @@ adat <- adat[,which(!is.na(colData(adat)$AT8_total))] #186
 #adat <- adat[,-173]
 dim(adat)
 adat <- adat[,which(colData(adat)$PathAD != 1)]
-colData(adat)$AT8_total <- log(colData(adat)$AT8_total)
+colData(adat)$AT8_total <- 10^(colData(adat)$AT8_total)
 
 #differential expression analysis (Limma)
 #create design matrix and run limma

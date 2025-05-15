@@ -15,6 +15,8 @@ library(fgsea)
 library(qusage)
 library(gt)
 library(tidyr)
+library(viridis)
+library(hrbrthemes)
 
 # Read in the adat file and metadata file
 adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
@@ -41,7 +43,7 @@ limma_model <- function(model,adat, name, coefficient,genes) {
   limma_res <- topTable(elimma,number = 100, adjust="BH", coef = coefficient,sort.by="P")
   limma_res$unique_names <- rownames(limma_res)
   limma_res <- merge(limma_res, genes, by.x = "unique_names", by.y="unique_names")
-  limma_res_all <- topTable(elimma,number = 1000, adjust="BH", coef = coefficient,sort.by="P")
+  limma_res_all <- topTable(elimma,number = Inf, adjust="BH", coef = coefficient,sort.by="P")
   limma_res_all$unique_names <- rownames(limma_res_all)
   limma_res_all<- merge(limma_res_all, genes, by.x = "unique_names", by.y="unique_names")
   
@@ -142,12 +144,15 @@ adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))]
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs)), genes = rowData(adat_totyrs)$EntrezGeneSymbol)
 totyrs_model <- model.matrix(~ agedeath + totyrs, data=colData(adat_totyrs))
 totyrs_res_all <- limma_model(totyrs_model,adat_totyrs, "totyrs","totyrs",genes)
+totyrs_res_all <- arrange(totyrs_res_all, P.Value)
 significance_table[3,2] <- length(which(totyrs_res_all$P.Value < 0.05))
 significance_table[3,3] <- length(which(totyrs_res_all$adj.P.Val < 0.05))
 totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs")
+totyrs_fgsea_res <- arrange(totyrs_fgsea_res, padj)
+head(totyrs_fgsea_res$leadingEdge)
 significance_table[3,4] <- length(which(totyrs_fgsea_res$pval < 0.05))
 significance_table[3,5] <- length(which(totyrs_fgsea_res$padj < 0.05))
-
+totyrs_fgsea_res[1:20,]
 #`~ age_at_death + PathAD + totyrs`
 adat_totyrs_PathAD <- adat_totyrs[,which(!is.na(colData(adat_totyrs)$PathAD))]
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs_PathAD)), genes = rowData(adat_totyrs_PathAD)$EntrezGeneSymbol)
@@ -168,8 +173,48 @@ CTE_res_all <- limma_model(CTE_model,adat_CTE, "CTE","CTE",genes)
 significance_table[5,2] <- length(which(CTE_res_all$P.Value < 0.05))
 significance_table[5,3] <- length(which(CTE_res_all$adj.P.Val < 0.05))
 CTE_fgsea_res <- fgsea_function(CTE_res_all,C2_genesets,"CTE")
+CTE_fgsea_res <- arrange(CTE_fgsea_res, padj)
 significance_table[5,4] <- length(which(CTE_fgsea_res$pval < 0.05))
 significance_table[5,5] <- length(which(CTE_fgsea_res$padj < 0.05))
+CTE_fgsea_res$leadingEdge[c(85,98)]
+CTE_fgsea_res[c(85,98),]
+
+#UBB and UBC spot checks with CTE
+protein_index <- matrix(data=NA, nrow = 5, ncol = 3)
+colnames(protein_index) <- c("geneName", "SeqID", "index")
+protein_index <- as.data.frame(protein_index)
+protein_index$geneName <- c("UBB","UBB","UBC","UBC","PSMB1")
+protein_index$SeqID <- c("seq.6641.60","seq.6651.74","seq.6172.7","seq.6647.55","seq.12612.37")
+protein_index[1,3] <- which(rownames(adat_CTE) == "seq.6641.60")
+protein_index[2,3] <- which(rownames(adat_CTE) == "seq.6651.74")
+protein_index[3,3] <- which(rownames(adat_CTE) == "seq.6172.7")
+protein_index[4,3] <- which(rownames(adat_CTE) == "seq.6647.55")
+protein_index[5,3] <- which(rownames(adat_CTE) == "seq.12612.37")
+protein_index
+for(i in 1:nrow(protein_index)){
+  index <- protein_index[i,3]
+  rowData(adat)$EntrezGeneSymbol[index] == protein_index[i,1]
+  protein_counts <- assays(adat_CTE)$counts[index,]
+  #grab CTE data
+  protein_CTE <- colData(adat_CTE)$CTE
+  #check lengths 
+  length(protein_counts) == length(protein_CTE)
+  counts_CTE <- data.frame(counts = protein_counts, CTE = protein_CTE)
+  write.csv(counts_CTE, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/CTE_followup/',protein_index[i,1],protein_index[i,2],'_CTE_followup_unlogged_file.csv'))
+  #create boxplots
+  CTE_box <- ggplot(counts_CTE, aes(x=CTE, y=counts, group = CTE)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle(paste0('Boxplot of CTE and ',protein_index[i,1])) +
+    xlab("CTE")
+  CTE_box
+  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/CTE_followup/',protein_index[i,1],protein_index[i,2],'_CTE_followup_boxplot.png'), plot = CTE_box, width = 8, height = 6)
+}
 
 #~ age_at_death + CTEStage
 adat_CTEStage <- adat[,which(!is.na(colData(adat)$CTEStage))]
@@ -179,9 +224,34 @@ CTEStage_res_all <- limma_model(CTEStage_model,adat_CTEStage, "CTEStage","CTESta
 significance_table[6,2] <- length(which(CTEStage_res_all$P.Value < 0.05))
 significance_table[6,3] <- length(which(CTEStage_res_all$adj.P.Val < 0.05))
 CTEStage_fgsea_res <- fgsea_function(CTEStage_res_all,C2_genesets,"CTEStage")
+CTEStage_fgsea_res <- arrange(CTEStage_fgsea_res, padj)
 significance_table[6,4] <- length(which(CTEStage_fgsea_res$pval < 0.05))
 significance_table[6,5] <- length(which(CTEStage_fgsea_res$padj < 0.05))
-
+CTEStage_fgsea_res$leadingEdge[c(63,70,77,93,96,99)]
+CTEStage_fgsea_res[c(63,70,77,93,96,99),]
+for(i in 1:nrow(protein_index)){
+  index <- protein_index[i,3]
+  rowData(adat)$EntrezGeneSymbol[index] == protein_index[i,1]
+  protein_counts <- assays(adat_CTEStage)$counts[index,]
+  #grab CTE data
+  protein_CTE <- colData(adat_CTEStage)$CTEStage
+  #check lengths 
+  length(protein_counts) == length(protein_CTE)
+  counts_CTE <- data.frame(counts = protein_counts, CTE = protein_CTE)
+  #create boxplots
+  CTE_box <- ggplot(counts_CTE, aes(x=CTE, y=counts, group = CTE)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
+    theme_ipsum() +
+    theme(
+      legend.position="none",
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle(paste0('Boxplot of CTE Stage and ',protein_index[i,1])) +
+    xlab("CTE Stage")
+  CTE_box
+  ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/CTE_followup/',protein_index[i,1],protein_index[i,2],'_CTEstage_followup_boxplot.png'), plot = CTE_box, width = 8, height = 6)
+}
 #~ age_at_death + CTELowvsHigh
 adat_CTEonly <- adat[,which(colData(adat)$CTE == 1)]
 adat_CTEonly_lowvshigh <- adat_CTEonly[,which(!is.na(colData(adat_CTEonly)$Group_de))]
@@ -192,6 +262,7 @@ CTEonly_lowvshigh_res_all <- limma_model(CTEonly_lowvshigh_model,adat_CTEonly_lo
 significance_table[7,2] <- length(which(CTEonly_lowvshigh_res_all$P.Value < 0.05))
 significance_table[7,3] <- length(which(CTEonly_lowvshigh_res_all$adj.P.Val < 0.05))
 CTEonly_lowvshigh_fgsea_res <- fgsea_function(CTEonly_lowvshigh_res_all,C2_genesets,"Group_de")
+CTEonly_lowvshigh_fgsea_res <- arrange(CTEonly_lowvshigh_fgsea_res, padj)
 significance_table[7,4] <- length(which(CTEonly_lowvshigh_fgsea_res$pval < 0.05))
 significance_table[7,5] <- length(which(CTEonly_lowvshigh_fgsea_res$padj < 0.05))
 
