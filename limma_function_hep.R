@@ -17,6 +17,8 @@ library(gt)
 library(tidyr)
 library(viridis)
 library(hrbrthemes)
+library(clusterProfiler)
+library(DOSE)
 
 # Read in the adat file and metadata file
 adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
@@ -33,6 +35,11 @@ adat <- adat[which(rowData(adat)$Organism == "Human"),] #7301
 #removes same rows
 #adat <- adat[-grep("Internal Use Only", rowData(adat)$TargetFullName), ] #7285
 adat <- adat[which(rowData(adat)$EntrezGeneID != ""),] #7285
+AT8 <- colData(adat)$AT8_total
+AT8 <- AT8[which(AT8 > 0)]
+AT8min <- min(AT8, na.rm=T)
+colData(adat)$AT8_total <- log(colData(adat)$AT8_total + 0.002628708)
+colData(adat)$hitsperyear <- colData(adat)$chii_g / colData(adat)$totyrs
 
 #differential expression analysis (Limma)
 #create design matrix and run limma
@@ -69,6 +76,7 @@ fgsea_function <- function(limma_res_all,C2_genesets,name){
   }
   # Get all the genes in your dataset and assign them to my_genes 
   my_genes <- unique(limma_res_all$genes)
+  C2_genesets <- split(C2_genesets$gene, C2_genesets$term)
   hidden <- unique(unlist(C2_genesets))
   
   # Convert gmt file to a matrix with the genes as rows and for each go annotation (columns) the values are 0 or 1
@@ -111,21 +119,24 @@ colnames(significance_table) <- c("Model","Nominal Significant Proteins","Adjust
 significance_table$Model <- c("age_at_death + AT8_total","age_at_death + PathAD + AT8_total","age_at_death + totyrs","age_at_death + PathAD + totyrs","age_at_death + CTE","age_at_death + CTEStage","age_at_death + CTELowvsHigh")
 significance_table
 
-#~ agedeath + AT8_total
-#model <- AT8_model
-#adat <- adat_AT8_PathAD
-#name <- "AT8_total"
-#coefficient <- "AT8_total"
+#~ agedeath + AT8_total -> no AD
 adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #183
-adat_AT8_PathAD <- adat_AT8[,which(colData(adat_AT8)$PathAD != 1)]
-genes <- data.frame(unique_names = rownames(rowData(adat_AT8_PathAD)), genes = rowData(adat_AT8_PathAD)$EntrezGeneSymbol)
-AT8_model <- model.matrix(~ agedeath + AT8_total, data=colData(adat_AT8_PathAD))
-AT8_res_all <- limma_model(AT8_model,adat_AT8_PathAD, "AT8_total","AT8_total",genes)
+adat_AT8_noAD <- adat_AT8[,which(colData(adat_AT8)$PathAD != 1)]
+genes <- data.frame(unique_names = rownames(rowData(adat_AT8_noAD)), genes = rowData(adat_AT8_noAD)$EntrezGeneSymbol)
+AT8_model <- model.matrix(~ agedeath + AT8_total, data=colData(adat_AT8_noAD))
+AT8_res_all <- limma_model(AT8_model,adat_AT8_noAD, "AT8_total_noAD","AT8_total",genes)
 significance_table[1,2] <- length(which(AT8_res_all$P.Value < 0.05))
 significance_table[1,3] <- length(which(AT8_res_all$adj.P.Val < 0.05))
-AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total")
+AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total_noAD")
 significance_table[1,4] <- length(which(AT8_fgsea_res$pval < 0.05))
 significance_table[1,5] <- length(which(AT8_fgsea_res$padj < 0.05))
+
+#~ agedeath + AT8_total
+adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #183
+genes <- data.frame(unique_names = rownames(rowData(adat_AT8)), genes = rowData(adat_AT8)$EntrezGeneSymbol)
+AT8_model <- model.matrix(~ agedeath + AT8_total, data=colData(adat_AT8))
+AT8_res_all <- limma_model(AT8_model,adat_AT8, "AT8_total","AT8_total",genes)
+AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total")
 
 #`~ age_at_death + PathAD + AT8_total`
 adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #183
@@ -149,10 +160,19 @@ significance_table[3,2] <- length(which(totyrs_res_all$P.Value < 0.05))
 significance_table[3,3] <- length(which(totyrs_res_all$adj.P.Val < 0.05))
 totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs")
 totyrs_fgsea_res <- arrange(totyrs_fgsea_res, padj)
-head(totyrs_fgsea_res$leadingEdge)
 significance_table[3,4] <- length(which(totyrs_fgsea_res$pval < 0.05))
 significance_table[3,5] <- length(which(totyrs_fgsea_res$padj < 0.05))
-totyrs_fgsea_res[1:20,]
+
+#~ age_at_death + totyrs -> remove AD samples
+adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))]
+adat_totyrs_noAD <- adat_totyrs[,which(colData(adat_totyrs)$PathAD != 1)]
+genes <- data.frame(unique_names = rownames(rowData(adat_totyrs_noAD)), genes = rowData(adat_totyrs_noAD)$EntrezGeneSymbol)
+totyrs_model <- model.matrix(~ agedeath + totyrs, data=colData(adat_totyrs_noAD))
+totyrs_res_all <- limma_model(totyrs_model,adat_totyrs_noAD, "totyrs_noAD","totyrs",genes)
+totyrs_res_all <- arrange(totyrs_res_all, P.Value)
+totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs_noAD")
+totyrs_fgsea_res <- arrange(totyrs_fgsea_res, padj)
+
 #`~ age_at_death + PathAD + totyrs`
 adat_totyrs_PathAD <- adat_totyrs[,which(!is.na(colData(adat_totyrs)$PathAD))]
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs_PathAD)), genes = rowData(adat_totyrs_PathAD)$EntrezGeneSymbol)
@@ -216,6 +236,15 @@ for(i in 1:nrow(protein_index)){
   ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/CTE_followup/',protein_index[i,1],protein_index[i,2],'_CTE_followup_boxplot.png'), plot = CTE_box, width = 8, height = 6)
 }
 
+#~ age_at_death + CTE -> no AD
+adat_CTE <- adat[,which(!is.na(colData(adat)$CTE))]
+adat_CTE_noAD <- adat_CTE[,which(colData(adat_CTE)$PathAD != 1)]
+genes <- data.frame(unique_names = rownames(rowData(adat_CTE_noAD)), genes = rowData(adat_CTE_noAD)$EntrezGeneSymbol)
+CTE_model <- model.matrix(~ agedeath + CTE, data=colData(adat_CTE_noAD))
+CTE_res_all <- limma_model(CTE_model,adat_CTE_noAD, "CTE_noAD","CTE",genes)
+CTE_fgsea_res <- fgsea_function(CTE_res_all,C2_genesets,"CTE_noAD")
+CTE_fgsea_res <- arrange(CTE_fgsea_res, padj)
+
 #~ age_at_death + CTEStage
 adat_CTEStage <- adat[,which(!is.na(colData(adat)$CTEStage))]
 genes <- data.frame(unique_names = rownames(rowData(adat_CTEStage)), genes = rowData(adat_CTEStage)$EntrezGeneSymbol)
@@ -252,6 +281,16 @@ for(i in 1:nrow(protein_index)){
   CTE_box
   ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/CTE_followup/',protein_index[i,1],protein_index[i,2],'_CTEstage_followup_boxplot.png'), plot = CTE_box, width = 8, height = 6)
 }
+
+#~ age_at_death + CTEStage -> noAD
+adat_CTEStage <- adat[,which(!is.na(colData(adat)$CTEStage))]
+adat_CTEStage_noAD <- adat_CTEStage[,which(colData(adat_CTEStage)$PathAD != 1)]
+genes <- data.frame(unique_names = rownames(rowData(adat_CTEStage_noAD)), genes = rowData(adat_CTEStage_noAD)$EntrezGeneSymbol)
+CTEStage_model <- model.matrix(~ agedeath + CTEStage, data=colData(adat_CTEStage_noAD))
+CTEStage_res_all <- limma_model(CTEStage_model,adat_CTEStage_noAD, "CTEStage_noAD","CTEStage",genes)
+CTEStage_fgsea_res <- fgsea_function(CTEStage_res_all,C2_genesets,"CTEStage_noAD")
+CTEStage_fgsea_res <- arrange(CTEStage_fgsea_res, padj)
+
 #~ age_at_death + CTELowvsHigh
 adat_CTEonly <- adat[,which(colData(adat)$CTE == 1)]
 adat_CTEonly_lowvshigh <- adat_CTEonly[,which(!is.na(colData(adat_CTEonly)$Group_de))]
@@ -266,7 +305,54 @@ CTEonly_lowvshigh_fgsea_res <- arrange(CTEonly_lowvshigh_fgsea_res, padj)
 significance_table[7,4] <- length(which(CTEonly_lowvshigh_fgsea_res$pval < 0.05))
 significance_table[7,5] <- length(which(CTEonly_lowvshigh_fgsea_res$padj < 0.05))
 
+#~ age_at_death + CTELowvsHigh -> noAD
+adat_CTEonly <- adat[,which(colData(adat)$CTE == 1)]
+adat_CTEonly_noAD <- adat_CTEonly[,which(colData(adat_CTEonly)$PathAD != 1)]
+adat_CTEonly_noAD_lowvshigh <- adat_CTEonly_noAD[,which(!is.na(colData(adat_CTEonly_noAD)$Group_de))]
+colData(adat_CTEonly_noAD_lowvshigh)$Group_de <- as.integer(ifelse(colData(adat_CTEonly_noAD_lowvshigh)$Group_de == "low", 0, ifelse(colData(adat_CTEonly_noAD_lowvshigh)$Group_de == "high", 1, colData(adat_CTEonly_noAD_lowvshigh)$Group_de))) 
+genes <- data.frame(unique_names = rownames(rowData(adat_CTEonly_noAD_lowvshigh)), genes = rowData(adat_CTEonly_noAD_lowvshigh)$EntrezGeneSymbol)
+CTEonly_lowvshigh_model <- model.matrix(~ agedeath + Group_de, data=colData(adat_CTEonly_noAD_lowvshigh))
+CTEonly_lowvshigh_res_all <- limma_model(CTEonly_lowvshigh_model,adat_CTEonly_noAD_lowvshigh, "Group_de_noAD","Group_de",genes)
+CTEonly_lowvshigh_fgsea_res <- fgsea_function(CTEonly_lowvshigh_res_all,C2_genesets,"Group_de_noAD")
+CTEonly_lowvshigh_fgsea_res <- arrange(CTEonly_lowvshigh_fgsea_res, padj)
+
 significance_table %>%
   gt()
 write.csv(significance_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/significant_limma_Proteins_Pathways_table.csv'))
 
+#impact of AD samples - no apparent impact on distribution of age of death
+#with AD samples
+hist(colData(adat)$agedeath)
+mean(colData(adat)$agedeath, na.rm = TRUE)
+adat_noAD <- adat[,which(colData(adat)$PathAD != 1)]
+#check to make sure filtering worked
+colData(adat_noAD)$PathAD
+hist(colData(adat_noAD)$agedeath)
+mean(colData(adat_noAD)$agedeath)
+#attempting gene connections plot
+
+#to create cnetplot, need to extract leading edge genes
+#fgseaRes$ID <- fgseaRes$pathway
+#fgseaRes$Description <- fgseaRes$pathway
+#fgseaRes$pvalue <- fgseaRes$pval
+#fgseaRes$p.adjust <- fgseaRes$padj
+#fgseaRes$qvalue <- fgseaRes$padj
+#fgseaRes$geneID <- sapply(fgseaRes$leadingEdge, paste, collapse = "/")
+#fgseaRes$Count <- sapply(fgseaRes$leadingEdge, length)
+
+#res_df <- fgseaRes[, c("ID", "Description", "pvalue", "p.adjust", "qvalue", "geneID", "Count")]
+
+# Create enrichResult object
+#enrich_obj <- new("enrichResult",
+#result = res_df,
+#pvalueCutoff = 0.05,
+#pAdjustMethod = "BH",
+#qvalueCutoff = 0.2,
+#gene = unique(unlist(fgseaRes$leadingEdge)),
+#geneSets = final_list,
+#organism = "UNKNOWN",
+#keytype = "UNKNOWN",
+#readable = FALSE)
+
+#gene_connections <- cnetplot(enrich_obj, showCategory = 3, foldChange = NA) +
+#ggplot2::labs(title = "fgsea Analysis")

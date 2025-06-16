@@ -39,7 +39,7 @@ adat <- adat[,which(!is.na(colData(adat)$AT8_total))] #186
 #adat <- adat[,-173]
 dim(adat)
 adat <- adat[,which(colData(adat)$PathAD != 1)]
-colData(adat)$AT8_total <- 10^(colData(adat)$AT8_total)
+colData(adat)$AT8_total <- log(colData(adat)$AT8_total + 1)
 
 #differential expression analysis (Limma)
 #create design matrix and run limma
@@ -49,7 +49,7 @@ AT8_model <- model.matrix(~ agedeath + AT8_total, data=colData(adat))
 fit_AT8 <- limma::lmFit(assays(adat)$counts, AT8_model)
 elimma_AT8 <- eBayes(fit_AT8)
 #create results files
-AT8_limma_res <- topTable(elimma_AT8,number = 100, adjust="BH", coef = "AT8_total",sort.by="P")
+AT8_limma_res <- topTable(elimma_AT8,number = Inf, adjust="BH", coef = "AT8_total",sort.by="P")
 AT8_limma_res$unique_names <- rownames(AT8_limma_res)
 AT8_limma_res <- merge(AT8_limma_res, genes, by.x = "unique_names", by.y="unique_names")
 
@@ -59,6 +59,16 @@ head(AT8_limma_res)
 fit_AT8$unique_names <- rownames(fit_AT8)
 fit_AT8 <- merge(fit_AT8, genes, by.x = "unique_names", by.y="unique_names")
 volcanoplot(elimma_AT8,coef="AT8_total",highlight=20,names=fit_AT8$genes, col="red",main="AT8_total") 
+
+volcano_plot1 <- EnhancedVolcano(AT8_limma_res,
+                                 lab = AT8_limma_res$genes,
+                                 x = 'logFC',
+                                 y = 'P.Value',
+                                 FCcutoff = 0,
+                                 drawConnectors = TRUE,
+                                 widthConnectors = 0.75,
+                                 title = 'AT8 Total')
+volcano_plot1
 ###################################################################################
 #spot check significant protein C1QTNF5 = seq.7810.20
 protein_index <- which(rownames(adat) == "seq.7810.20")

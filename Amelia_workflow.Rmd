@@ -1,0 +1,207 @@
+---
+title: "Amelia_workflow"
+author: "wisdom & md"
+date: "2025-06-16"
+output: html_document
+---
+
+#### Install Amelia package
+```{r eval=FALSE}
+install.packages("Amelia")
+install.packages("sjlabelled")
+```
+
+#### Load Amelia
+```{r}
+library("Amelia")
+library("dplyr")
+library("sjlabelled") ## Remove labels from variables
+library(tidyr)
+library(ggplot2)
+```
+
+#### Set seed
+```{r}
+set.seed(1234)
+```
+
+#### Load Data
+```{r}  
+#Clinical Covariate
+cov_data <- readRDS("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.rds")
+```
+
+### Run Amelia
+
+#### Prepare data for Amelia
+```{r}
+noms=c("npoldd","sleepcb","nppath6","PathMND","Year","Batch","npold","nppath","nplbod","nptdpb","nptdpc","nptdpe","npftdtau","npcort","npprog","npftdt5","npftdt9","npftdtdp","PathAD","PathLBD","PathFTD","CTE","sleepact","suicide","sport","apoe_de","TMEM106B_dom","TMEM106B_invrec","cod","csparCTE","rs1990622","rs3173615","race")#Removed due to not varying in dataset ,,"nppick","npftdt2","npftdt8","npftdt10","PathPrion" 
+
+ords=c("npoldd1","npoldd3","npold1","npold2","npold3","npold4","DementiaHx","ParknismHx","nphemo","npavas","npwmr","nphipscl","npbraak","npneur","npadnc","npdiff","npamy","nparter","CTEStage","Group","apoe","Group_de") #
+
+idvars=c("Core_ID", "SampleName","nppick", "npftdt2", "npftdt8", "npftdt10", "PathPrion", "micdorfront", "micinfpar", "micalc","npoldd2","npoldd4","npoftd")
+
+### Removing variables that do not vary in the dataset
+# cov_data_subset <- subset(cov_data, select=-c( nppick, npftdt2, npftdt8, npftdt10, PathPrion, micdorfront, micinfpar, micalc,npoldd2,npoldd4,npoftd))
+
+### Remove labels from variables
+cov_data_subset_clean <- remove_all_labels(cov_data)
+```
+
+#### Run Amelia on dataset
+```{r}
+amelia.out1 <- amelia(
+                      cov_data_subset_clean, 
+                      m=20, 
+                      p2s=2, 
+                      noms=noms, 
+                      ords=ords, 
+                      idvars=idvars, 
+                      incheck=T,
+                      empri=0.3*nrow(cov_data_subset_clean),
+                      # parallel = "multicore",
+                      # ncpus = 30
+                      )
+
+```
+
+### Diagnosis of imputation
+
+#### Histogram of mean imputation (red) vs observed values (blue) of actaully imputed numerical data
+```{r}
+p <- plot(amelia.out1)
+```
+
+#### Overdispersed starting values
+```{r}
+disperse(amelia.out1, dims = 2, m = 5)
+```
+
+### Save imputed datasets
+```{r}
+filepath <- paste("/restricted/projectnb/cteseq/projects/challenge-project-2024/imputation/Stable_Releases/",Sys.Date(),sep="")
+dir.create(filepath)
+write.amelia(obj = amelia.out1, file.stem = paste(filepath,"/outdata",sep=""))
+```
+
+### Re-imputation for posterior predictive checking
+
+#### Step 1: Duplicate and manipulate the data
+```{r}
+# Duplicate the data
+cov_data_dup <- cov_data_subset_clean
+
+# Set CTE to NA in the duplicated dataset
+cov_data_dup$CTE <- NA
+
+# Add a flag to identify original vs duplicate
+cov_data_subset_clean$.group <- "original"
+cov_data_dup$.group <- "duplicate"
+
+# Combine the datasets
+cov_data_reimpute <- bind_rows(cov_data_subset_clean, cov_data_dup)
+
+```
+
+#### Step 2: Re-impute with Amelia
+```{r}
+library(Amelia)
+
+amelia_reimputed <- amelia(
+  cov_data_reimpute,
+  m = 2000,
+  p2s = 2,
+  noms = c(noms),
+  ords = ords,
+  idvars = c(idvars, ".group"),
+  empri = 0.3 * nrow(cov_data_reimpute)
+)
+
+```
+
+#### Step 3: Run regression & extract coefficients
+```{r}
+library(broom)
+
+# Define model formula
+model_formula <- as.formula("CTE ~ race + apoe + sport + sleepact")
+
+# Extract betas for original and duplicate imputations
+extract_betas <- function(data_list) {
+  replicate_coefs <- lapply(data_list$imputations, function(df) {
+    df_orig <- df[df$.group == "original", ]
+    df_rep  <- df[df$.group == "duplicate", ]
+    list(
+      orig = coef(lm(model_formula, data = df_orig)),
+      rep  = coef(lm(model_formula, data = df_rep))
+    )
+  })
+
+  # Bind into matrices
+  orig_coefs <- do.call(rbind, lapply(replicate_coefs, `[[`, "orig"))
+  rep_coefs  <- do.call(rbind, lapply(replicate_coefs, `[[`, "rep"))
+  
+  list(original = orig_coefs, replicate = rep_coefs)
+}
+
+coef_data <- extract_betas(amelia_reimputed)
+
+```
+
+#### Step 4: Calculate PPP
+```{r}
+# Function to calculate PPP
+compute_ppp <- function(orig_mat, rep_mat) {
+  apply(abs(rep_mat) >= abs(orig_mat), 2, mean)
+}
+
+ppp_vals <- compute_ppp(coef_data$original, coef_data$replicate)
+print(ppp_vals)
+
+```
+
+#### Step 5: Plot distributions
+```{r}
+# Stack for plotting
+coefs_df <- as.data.frame(coef_data$replicate)
+coefs_df_long <- pivot_longer(coefs_df, everything(), names_to = "term", values_to = "estimate")
+
+# Original means
+orig_means <- colMeans(coef_data$original)
+orig_df <- data.frame(term = names(orig_means), estimate = orig_means)
+
+ggplot(coefs_df_long, aes(x = estimate)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  geom_vline(data = orig_df, aes(xintercept = estimate), color = "red", linetype = "dashed") +
+  facet_wrap(~term, scales = "free") +
+  labs(title = "Posterior Predictive Check: Distribution of Coefficients",
+       subtitle = "Red dashed line: Original estimate") +
+  theme_minimal()
+
+```
+
+#### Optional Scatter plot
+```{r}
+# Prepare data frame for scatterplot
+scatter_df <- data.frame(
+  term = colnames(coef_data$original),
+  orig_mean = colMeans(coef_data$original),
+  rep_mean  = colMeans(coef_data$replicate)
+)
+
+# Make scatterplot
+ggplot(scatter_df, aes(x = orig_mean, y = rep_mean, label = term)) +
+  geom_point(size = 3) +
+  geom_text(nudge_y = 0.05, check_overlap = TRUE) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") + 
+  theme_minimal() +
+  labs(
+    x = "Mean Coefficient (Original Completed Data)",
+    y = "Mean Coefficient (Re-Imputed Data)",
+    title = "PPC Scatterplot: Original vs Re-Imputed Coefficients",
+    subtitle = "Dashed line = perfect agreement"
+  )
+
+
+```
+
