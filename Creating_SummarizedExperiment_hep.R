@@ -15,7 +15,7 @@ library(ggfortify)
 # Read in the adat file and BBID file
 adat <- SomaDataIO::read_adat("/restricted/projectnb/cteseq/data/somascan_2024/CTE Somascan/HMS-24-036_2024-08-09/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP.adat")
 adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
-metadata <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.csv")
+metadata <- readRDS("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.rds")
 dim(adat)
 adat <- log2(adat)
 analytes <- SomaDataIO::getAnalytes(adat)
@@ -81,4 +81,17 @@ saveRDS(pca_res, file = "/restricted/projectnb/cteseq/projects/somascan/results/
 png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/pcaplot_212samp.png'))
 autoplot(pca_res, data = colData(adat_summarized_experiment), label = TRUE, shape = FALSE,label.label = "SampleGroup", label.size = 3)
 dev.off()
+
+#added filtering
+adat_summarized_experiment <- adat_summarized_experiment[-grep("Internal Use Only", rowData(adat_summarized_experiment)$TargetFullName), ] #7313 (-283)
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-39")]
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-122")]
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-84")]
+#remove non-human samples
+adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$Organism == "Human"),] #7301
+adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$EntrezGeneID != ""),] #7285
+AT8 <- colData(adat_summarized_experiment)$AT8_total
+AT8 <- AT8[which(AT8 > 0)]
+AT8min <- min(AT8, na.rm=T)
+colData(adat_summarized_experiment)$AT8_total <- log(colData(adat_summarized_experiment)$AT8_total + 0.002628708)
 saveRDS(adat_summarized_experiment, file = "/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")

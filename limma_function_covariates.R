@@ -23,23 +23,7 @@ library(DOSE)
 # Read in the adat file and metadata file
 adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
 metadata <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.csv")
-rna <- fread("/restricted/projectnb/cteseq/projects/challenge-project-2024/all_counts.csv")
-adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
-C2_genesets <- read.gmt("/restricted/projectnb/cteseq/projects/somascan/data/data/c2.all.v2024.1.Hs.symbols.gmt")
-adat <- adat[-grep("Internal Use Only", rowData(adat)$TargetFullName), ] #7313 (-283)
-adat <- adat[,which(colData(adat)$SampleGroup != "K-39")]
-adat <- adat[,which(colData(adat)$SampleGroup != "K-122")]
-adat <- adat[,which(colData(adat)$SampleGroup != "K-84")]
-#remove non-human samples
-adat <- adat[which(rowData(adat)$Organism == "Human"),] #7301
-#removes same rows
-#adat <- adat[-grep("Internal Use Only", rowData(adat)$TargetFullName), ] #7285
-adat <- adat[which(rowData(adat)$EntrezGeneID != ""),] #7285
-AT8 <- colData(adat)$AT8_total
-AT8 <- AT8[which(AT8 > 0)]
-AT8min <- min(AT8, na.rm=T)
-colData(adat)$AT8_total <- log(colData(adat)$AT8_total + 0.002628708)
-colData(adat)$hitsperyear <- colData(adat)$chii_g / colData(adat)$totyrs
+C2_genesets <- read.gmt("/restricted/projectnb/cteseq/projects/somascan/data/c2.all.v2024.1.Hs.symbols.gmt")
 
 #differential expression analysis (Limma)
 #create design matrix and run limma
@@ -58,7 +42,7 @@ limma_model <- function(model,adat, name, coefficient,genes) {
   coef_names <- colnames(elimma$coefficients)
   # Extract logFC and p-values for each coefficient
   limma_res_all_coef <- lapply(coef_names, function(cn) {
-    tt <- topTable(elimma, coef = cn, number = Inf, sort.by = "none")
+    tt <- topTable(elimma, coef = cn, number = Inf, sort.by = "none",adjust="BH")
     tt <- tt[, c("logFC", "P.Value", "adj.P.Val")]
     colnames(tt) <- paste(cn, c("logFC", "P.Value", "adj.P.Val"), sep = "_")
     return(tt)
@@ -139,7 +123,7 @@ fgsea_function <- function(limma_res_all,C2_genesets,name){
   return(fgseaRes)
 }
 
-significance_table <- matrix(data=NA,nrow = 11,ncol = 5)
+significance_table <- matrix(data=NA,nrow = 13,ncol = 5)
 significance_table <- as.data.frame(significance_table)
 colnames(significance_table) <- c("Model","Nominal Significant Proteins",
                                   "Adjusted Significant Proteins","Nominal Significant Pathways",
@@ -148,13 +132,15 @@ significance_table$Model <- c("age_at_death + PathAD + PathLBD + PathFTD + AT8_t
                               "age_at_death + PathAD + PathLBD + PathFTD + AT8_total*CTE",
                               "age_at_death + PathAD + PathLBD + PathFT + totyrs",
                               "age_at_death + PathAD + PathLBD + PathFT + totyrs*CTE",
+                              "age_at_death + PathAD + PathLBD + PathFTD + CTE",
                               "age_at_death + PathAD + PathLBD + PathFTD + CTEStage",
                               "age_at_death + PathAD + PathLBD + PathFTD + CTELowvsHigh",
                               "age_at_death + PathAD + PathLBD + PathFTD + CTERHIvslow",
-                              "age_at_death + PathAD + PathLBD + PathFTD + hitsperyear",
-                              "age_at_death + PathAD + PathLBD + PathFTD + AT8_total + hitsperyear",
-                              "age_at_death + PathAD + PathLBD + PathFTD + chii_g",
-                              "age_at_death + PathAD + PathLBD + PathFTD + AT8_total + chii_g")
+                              "age_at_death + PathAD + PathLBD + PathFTD + maxaggsum",
+                              "age_at_death + PathAD + PathLBD + PathFTD + CDStot",
+                              "age_at_death + PathAD + PathLBD + PathFTD + DementiaHx",
+                              "age_at_death + PathAD + PathLBD + PathFTD + faqtot",
+                              "age_at_death + PathAD + PathLBD + PathFTD + chii_g")
 significance_table
 
 #`~ age_at_death + PathAD + PathLBD + PathFTD + AT8_total`
@@ -164,11 +150,11 @@ colData(adat_AT8)$PathLBD <- as.integer(ifelse(colData(adat_AT8)$PathLBD == 2, 1
 genes <- data.frame(unique_names = rownames(rowData(adat_AT8)), genes = rowData(adat_AT8)$EntrezGeneSymbol)
 AT8_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + AT8_total, data=colData(adat_AT8))
 AT8_res_all <- limma_model(AT8_model,adat_AT8, "AT8_total","AT8_total",genes)
-significance_table[1,2] <- length(which(AT8_res_all$P.Value < 0.05))
-significance_table[1,3] <- length(which(AT8_res_all$adj.P.Val < 0.05))
+significance_table[1,2] <- length(which(AT8_res_all$P.Value < 0.1))
+significance_table[1,3] <- length(which(AT8_res_all$adj.P.Val < 0.1))
 AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total")
-significance_table[1,4] <- length(which(AT8_fgsea_res$pval < 0.05))
-significance_table[1,5] <- length(which(AT8_fgsea_res$padj < 0.05))
+significance_table[1,4] <- length(which(AT8_fgsea_res$pval < 0.1))
+significance_table[1,5] <- length(which(AT8_fgsea_res$padj < 0.1))
 
 #`~ age_at_death + PathAD + PathLBD + PathFTD + AT8_total*CTE`
 adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #183
@@ -176,7 +162,7 @@ adat_AT8 <- adat_AT8[,which(!is.na(colData(adat_AT8)$PathAD))] #181
 colData(adat_AT8)$PathLBD <- as.integer(ifelse(colData(adat_AT8)$PathLBD == 2, 1, 0))
 genes <- data.frame(unique_names = rownames(rowData(adat_AT8)), genes = rowData(adat_AT8)$EntrezGeneSymbol)
 AT8_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + AT8_total*CTE, data=colData(adat_AT8))
-AT8_res_all <- limma_model(AT8_model,adat_AT8, "AT8_total_CTE","AT8_total:CTE",genes)
+AT8_res_all <- limma_model(AT8_model,adat_AT8, "AT8_total_CTE","AT8_total:CTE1",genes)
 significance_table[2,2] <- length(which(AT8_res_all$P.Value < 0.05))
 significance_table[2,3] <- length(which(AT8_res_all$adj.P.Val < 0.05))
 AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total_CTE")
@@ -184,8 +170,8 @@ significance_table[2,4] <- length(which(AT8_fgsea_res$pval < 0.05))
 significance_table[2,5] <- length(which(AT8_fgsea_res$padj < 0.05))
 
 #`~ age_at_death + PathAD + PathLBD + PathFT + totyrs`
-adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))]
-adat_totyrs <- adat_totyrs[,which(!is.na(colData(adat_totyrs)$PathAD))]
+adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))] #196
+adat_totyrs <- adat_totyrs[,which(!is.na(colData(adat_totyrs)$PathAD))] #195
 colData(adat_totyrs)$PathLBD <- as.integer(ifelse(colData(adat_totyrs)$PathLBD == 2, 1, 0))
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs)), genes = rowData(adat_totyrs)$EntrezGeneSymbol)
 totyrs_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + totyrs, data=colData(adat_totyrs))
@@ -203,42 +189,57 @@ adat_totyrs <- adat_totyrs[,which(!is.na(colData(adat_totyrs)$PathAD))]
 colData(adat_totyrs)$PathLBD <- as.integer(ifelse(colData(adat_totyrs)$PathLBD == 2, 1, 0))
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs)), genes = rowData(adat_totyrs)$EntrezGeneSymbol)
 totyrs_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + totyrs*CTE, data=colData(adat_totyrs))
-totyrs_res_all <- limma_model(totyrs_model,adat_totyrs, "totyrs_CTE","totyrs:CTE",genes)
+totyrs_res_all <- limma_model(totyrs_model,adat_totyrs, "totyrs_CTE","totyrs:CTE1",genes)
 significance_table[4,2] <- length(which(totyrs_res_all$P.Value < 0.05))
 significance_table[4,3] <- length(which(totyrs_res_all$adj.P.Val < 0.05))
 totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs_CTE")
 significance_table[4,4] <- length(which(totyrs_fgsea_res$pval < 0.05))
 significance_table[4,5] <- length(which(totyrs_fgsea_res$padj < 0.05))
 
+#~ age_at_death + PathAD + PathLBD + PathFTD + CTE
+adat_CTE <- adat[,which(!is.na(colData(adat)$CTE))]
+adat_CTE <- adat_CTE[,which(!is.na(colData(adat_CTE)$PathAD))]
+colData(adat_CTE)$PathLBD <- as.integer(ifelse(colData(adat_CTE)$PathLBD == 2, 1, 0))
+genes <- data.frame(unique_names = rownames(rowData(adat_CTE)), genes = rowData(adat_CTE)$EntrezGeneSymbol)
+CTE_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + CTE, data=colData(adat_CTE))
+CTE_res_all <- limma_model(CTE_model,adat_CTE, "CTE","CTE1",genes)
+significance_table[5,2] <- length(which(CTE_res_all$P.Value < 0.05))
+significance_table[5,3] <- length(which(CTE_res_all$adj.P.Val < 0.05))
+CTE_fgsea_res <- fgsea_function(CTE_res_all,C2_genesets,"CTE")
+significance_table[5,4] <- length(which(CTE_fgsea_res$pval < 0.05))
+significance_table[5,5] <- length(which(CTE_fgsea_res$padj < 0.05))
+
 #~ age_at_death + PathAD + PathLBD + PathFTD + CTEStage
 adat_CTEStage <- adat[,which(!is.na(colData(adat)$CTEStage))]
 adat_CTEStage <- adat_CTEStage[,which(!is.na(colData(adat_CTEStage)$PathAD))]
+colData(adat_CTEStage)$CTEStage <- as.numeric(colData(adat_CTEStage)$CTEStage)
 colData(adat_CTEStage)$PathLBD <- as.integer(ifelse(colData(adat_CTEStage)$PathLBD == 2, 1, 0))
 genes <- data.frame(unique_names = rownames(rowData(adat_CTEStage)), genes = rowData(adat_CTEStage)$EntrezGeneSymbol)
 CTEStage_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + CTEStage, data=colData(adat_CTEStage))
 CTEStage_res_all <- limma_model(CTEStage_model,adat_CTEStage, "CTEStage","CTEStage",genes)
-significance_table[5,2] <- length(which(CTEStage_res_all$P.Value < 0.05))
-significance_table[5,3] <- length(which(CTEStage_res_all$adj.P.Val < 0.05))
+significance_table[6,2] <- length(which(CTEStage_res_all$P.Value < 0.05))
+significance_table[6,3] <- length(which(CTEStage_res_all$adj.P.Val < 0.05))
 CTEStage_fgsea_res <- fgsea_function(CTEStage_res_all,C2_genesets,"CTEStage")
-significance_table[5,4] <- length(which(CTEStage_fgsea_res$pval < 0.05))
-significance_table[5,5] <- length(which(CTEStage_fgsea_res$padj < 0.05))
+significance_table[6,4] <- length(which(CTEStage_fgsea_res$pval < 0.05))
+significance_table[6,5] <- length(which(CTEStage_fgsea_res$padj < 0.05))
 
 #~ age_at_death + PathAD + PathLBD + PathFTD + CTELowvsHigh
 #no CTE = removed
 #low CTE = 0
 #high CTE = 1
 #remember to add back in other steps if we remove CTE stage model
-adat_highlow <- adat_CTEStage[,which(!(colData(adat_CTEStage)$CTEStage) == 0)]
-colData(adat_highlow)$Group_de <- as.integer(ifelse(colData(adat_highlow)$CTEStage == 1, 0, ifelse(colData(adat_highlow)$CTEStage == 2, 0, ifelse(colData(adat_highlow)$CTEStage == 3, 1, ifelse(colData(adat_highlow)$CTEStage == 4, 1, colData(adat_highlow)$Group_de)))))
+adat_highlow <- adat_CTEStage[,which(!(colData(adat_CTEStage)$CTEStage) == 1)]
+adat_highlow <- adat_highlow[,which(!is.na(colData(adat_highlow)$Group_de))]
+colData(adat_highlow)$Group_de <- as.integer(ifelse(colData(adat_highlow)$CTEStage == 2, 0, ifelse(colData(adat_highlow)$CTEStage == 3, 0, ifelse(colData(adat_highlow)$CTEStage == 4, 1, ifelse(colData(adat_highlow)$CTEStage == 5, 1, colData(adat_highlow)$Group_de)))))
 genes <- data.frame(unique_names = rownames(rowData(adat_highlow)), genes = rowData(adat_highlow)$EntrezGeneSymbol)
 CTE_lowvshigh_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + Group_de, data=colData(adat_highlow))
 CTE_lowvshigh_res_all <- limma_model(CTE_lowvshigh_model,adat_highlow, "CTE_lowvshigh","Group_de",genes)
-significance_table[6,2] <- length(which(CTE_lowvshigh_res_all$P.Value < 0.05))
-significance_table[6,3] <- length(which(CTE_lowvshigh_res_all$adj.P.Val < 0.05))
+significance_table[7,2] <- length(which(CTE_lowvshigh_res_all$P.Value < 0.05))
+significance_table[7,3] <- length(which(CTE_lowvshigh_res_all$adj.P.Val < 0.05))
 CTE_lowvshigh_fgsea_res <- fgsea_function(CTE_lowvshigh_res_all,C2_genesets,"CTE_lowvshigh")
 CTE_lowvshigh_fgsea_res <- arrange(CTE_lowvshigh_fgsea_res, padj)
-significance_table[6,4] <- length(which(CTE_lowvshigh_fgsea_res$pval < 0.05))
-significance_table[6,5] <- length(which(CTE_lowvshigh_fgsea_res$padj < 0.05))
+significance_table[7,4] <- length(which(CTE_lowvshigh_fgsea_res$pval < 0.05))
+significance_table[7,5] <- length(which(CTE_lowvshigh_fgsea_res$padj < 0.05))
 
 #~ age_at_death + PathAD + PathLBD + PathFTD + CTERHIvslow
 #no CTE = 0
@@ -246,43 +247,67 @@ significance_table[6,5] <- length(which(CTE_lowvshigh_fgsea_res$padj < 0.05))
 #high CTE = removed
 #remember to add back in other steps if we remove CTE stage model
 adat_RHIlow <- adat_CTEStage[,which(!(colData(adat_CTEStage)$Group_de) == "high")]
-colData(adat_RHIlow)$Group_de <- as.integer(ifelse(colData(adat_RHIlow)$CTEStage == 1, 1, ifelse(colData(adat_RHIlow)$CTEStage == 2, 1, ifelse(colData(adat_RHIlow)$CTEStage == 0, 0, colData(adat_RHIlow)$Group_de))))
+adat_RHIlow <- adat_RHIlow[,which(!is.na(colData(adat_RHIlow)$Group_de))]
+colData(adat_RHIlow)$Group_de <- as.integer(ifelse(colData(adat_RHIlow)$CTEStage == 2, 1, ifelse(colData(adat_RHIlow)$CTEStage == 3, 1, ifelse(colData(adat_RHIlow)$CTEStage == 1, 0, colData(adat_RHIlow)$Group_de))))
 genes <- data.frame(unique_names = rownames(rowData(adat_CTEStage)), genes = rowData(adat_CTEStage)$EntrezGeneSymbol)
 CTE_RHIvslow_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + Group_de, data=colData(adat_RHIlow))
 CTE_RHIvslow_res_all <- limma_model(CTE_RHIvslow_model,adat_RHIlow, "CTE_RHIvslow","Group_de",genes)
-significance_table[7,2] <- length(which(CTE_RHIvslow_res_all$P.Value < 0.05))
-significance_table[7,3] <- length(which(CTE_RHIvslow_res_all$adj.P.Val < 0.05))
+significance_table[8,2] <- length(which(CTE_RHIvslow_res_all$P.Value < 0.05))
+significance_table[8,3] <- length(which(CTE_RHIvslow_res_all$adj.P.Val < 0.05))
 CTE_RHIvslow_fgsea_res <- fgsea_function(CTE_RHIvslow_res_all,C2_genesets,"CTE_RHIvslow")
 CTE_RHIvslow_fgsea_res <- arrange(CTE_RHIvslow_fgsea_res, padj)
-significance_table[7,4] <- length(which(CTE_RHIvslow_fgsea_res$pval < 0.05))
-significance_table[7,5] <- length(which(CTE_RHIvslow_fgsea_res$padj < 0.05))
+significance_table[8,4] <- length(which(CTE_RHIvslow_fgsea_res$pval < 0.05))
+significance_table[8,5] <- length(which(CTE_RHIvslow_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + hitsperyear
-adat_hits <- adat[,which(!is.na(colData(adat)$hitsperyear))]
-adat_hits <- adat_hits[,which(!is.na(colData(adat_hits)$PathAD))]
-colData(adat_hits)$PathLBD <- as.integer(ifelse(colData(adat_hits)$PathLBD == 2, 1, 0))
-genes <- data.frame(unique_names = rownames(rowData(adat_hits)), genes = rowData(adat_hits)$EntrezGeneSymbol)
-hits_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + hitsperyear, data=colData(adat_hits))
-hits_res_all <- limma_model(hits_model,adat_hits, "hitsperyear","hitsperyear",genes)
-significance_table[8,2] <- length(which(hits_res_all$P.Value < 0.05))
-significance_table[8,3] <- length(which(hits_res_all$adj.P.Val < 0.05))
-hits_fgsea_res <- fgsea_function(hits_res_all,C2_genesets,"hitsperyear")
-significance_table[8,4] <- length(which(hits_fgsea_res$pval < 0.05))
-significance_table[8,5] <- length(which(hits_fgsea_res$padj < 0.05))
+#~ age_at_death + PathAD + PathLBD + PathFTD + maxaggsum
+adat_maxaggsum <- adat[,which(!is.na(colData(adat)$maxaggsum))]
+adat_maxaggsum <- adat_maxaggsum[,which(!is.na(colData(adat_maxaggsum)$agedeath))]
+genes <- data.frame(unique_names = rownames(rowData(adat_maxaggsum)), genes = rowData(adat_maxaggsum)$EntrezGeneSymbol)
+maxaggsum_model <- model.matrix(~ agedeath + maxaggsum, data=colData(adat_maxaggsum))
+maxaggsum_res_all <- limma_model(maxaggsum_model,adat_maxaggsum, "maxaggsum","maxaggsum",genes)
+significance_table[9,2] <- length(which(maxaggsum_res_all$P.Value < 0.05))
+significance_table[9,3] <- length(which(maxaggsum_res_all$adj.P.Val < 0.05))
+maxaggsum_fgsea_res <- fgsea_function(maxaggsum_res_all,C2_genesets,"maxaggsum")
+significance_table[9,4] <- length(which(maxaggsum_fgsea_res$pval < 0.05))
+significance_table[9,5] <- length(which(maxaggsum_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + hitsperyear + AT8_total
-adat_hits <- adat[,which(!is.na(colData(adat)$hitsperyear))]
-adat_hits <- adat_hits[,which(!is.na(colData(adat_hits)$PathAD))]
-adat_hits <- adat_hits[,which(!is.na(colData(adat_hits)$AT8_total))]
-colData(adat_hits)$PathLBD <- as.integer(ifelse(colData(adat_hits)$PathLBD == 2, 1, 0))
-genes <- data.frame(unique_names = rownames(rowData(adat_hits)), genes = rowData(adat_hits)$EntrezGeneSymbol)
-hits_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + AT8_total + hitsperyear, data=colData(adat_hits))
-hits_res_all <- limma_model(hits_model,adat_hits, "hitsperyear_with_tau","hitsperyear",genes)
-significance_table[9,2] <- length(which(hits_res_all$P.Value < 0.05))
-significance_table[9,3] <- length(which(hits_res_all$adj.P.Val < 0.05))
-hits_fgsea_res <- fgsea_function(hits_res_all,C2_genesets,"hitsperyear_with_tau")
-significance_table[9,4] <- length(which(hits_fgsea_res$pval < 0.05))
-significance_table[9,5] <- length(which(hits_fgsea_res$padj < 0.05))
+#~ age_at_death + PathAD + PathLBD + PathFTD + CDStot
+adat_cds <- adat[,which(!is.na(colData(adat)$CDStot))]
+adat_cds <- adat_cds[,which(!is.na(colData(adat_cds)$PathAD))]
+colData(adat_cds)$PathLBD <- as.integer(ifelse(colData(adat_cds)$PathLBD == 2, 1, 0))
+genes <- data.frame(unique_names = rownames(rowData(adat_cds)), genes = rowData(adat_cds)$EntrezGeneSymbol)
+cds_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + CDStot, data=colData(adat_cds))
+cds_res_all <- limma_model(cds_model,adat_cds, "CDStot","CDStot",genes)
+significance_table[10,2] <- length(which(cds_res_all$P.Value < 0.05))
+significance_table[10,3] <- length(which(cds_res_all$adj.P.Val < 0.05))
+cds_fgsea_res <- fgsea_function(cds_res_all,C2_genesets,"CDStot")
+significance_table[10,4] <- length(which(cds_fgsea_res$pval < 0.05))
+significance_table[10,5] <- length(which(cds_fgsea_res$padj < 0.05))
+
+#~ age_at_death + PathAD + PathLBD + PathFTD + Dementia
+adat_dementia <- adat[,which(!is.na(colData(adat)$DementiaHx))]
+adat_dementia <- adat_dementia[,which(!is.na(colData(adat_dementia)$agedeath))]
+genes <- data.frame(unique_names = rownames(rowData(adat_dementia)), genes = rowData(adat_dementia)$EntrezGeneSymbol)
+dementia_model <- model.matrix(~ agedeath + DementiaHx, data=colData(adat_dementia))
+dementia_res_all <- limma_model(dementia_model,adat_dementia, "DementiaHx","DementiaHx1",genes)
+significance_table[11,2] <- length(which(dementia_res_all$P.Value < 0.05))
+significance_table[11,3] <- length(which(dementia_res_all$adj.P.Val < 0.05))
+dementia_fgsea_res <- fgsea_function(dementia_res_all,C2_genesets,"DementiaHx")
+significance_table[11,4] <- length(which(dementia_fgsea_res$pval < 0.05))
+significance_table[11,5] <- length(which(dementia_fgsea_res$padj < 0.05))
+
+#~ age_at_death + PathAD + PathLBD + PathFTD + faqtot
+adat_faq <- adat[,which(!is.na(colData(adat)$faqtot))]
+adat_faq <- adat_faq[,which(!is.na(colData(adat_faq)$PathAD))]
+colData(adat_faq)$PathLBD <- as.integer(ifelse(colData(adat_faq)$PathLBD == 2, 1, 0))
+genes <- data.frame(unique_names = rownames(rowData(adat_faq)), genes = rowData(adat_faq)$EntrezGeneSymbol)
+faq_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + faqtot, data=colData(adat_faq))
+faq_res_all <- limma_model(faq_model,adat_faq, "faqtot","faqtot",genes)
+significance_table[12,2] <- length(which(faq_res_all$P.Value < 0.05))
+significance_table[12,3] <- length(which(faq_res_all$adj.P.Val < 0.05))
+faq_fgsea_res <- fgsea_function(faq_res_all,C2_genesets,"faqtot")
+significance_table[12,4] <- length(which(faq_fgsea_res$pval < 0.05))
+significance_table[12,5] <- length(which(faq_fgsea_res$padj < 0.05))
 
 #~ age_at_death + PathAD + PathLBD + PathFTD + chii_g
 adat_ghits <- adat[,which(!is.na(colData(adat)$chii_g))]
@@ -291,25 +316,11 @@ colData(adat_ghits)$PathLBD <- as.integer(ifelse(colData(adat_ghits)$PathLBD == 
 genes <- data.frame(unique_names = rownames(rowData(adat_ghits)), genes = rowData(adat_ghits)$EntrezGeneSymbol)
 ghits_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + chii_g, data=colData(adat_ghits))
 ghits_res_all <- limma_model(ghits_model,adat_ghits, "chii_g","chii_g",genes)
-significance_table[10,2] <- length(which(ghits_res_all$P.Value < 0.05))
-significance_table[10,3] <- length(which(ghits_res_all$adj.P.Val < 0.05))
+significance_table[13,2] <- length(which(ghits_res_all$P.Value < 0.05))
+significance_table[13,3] <- length(which(ghits_res_all$adj.P.Val < 0.05))
 ghits_fgsea_res <- fgsea_function(ghits_res_all,C2_genesets,"chii_g")
-significance_table[10,4] <- length(which(ghits_fgsea_res$pval < 0.05))
-significance_table[10,5] <- length(which(ghits_fgsea_res$padj < 0.05))
-
-#~ age_at_death + PathAD + PathLBD + PathFTD + chii_g + AT8_total
-adat_ghits <- adat[,which(!is.na(colData(adat)$chii_g))]
-adat_ghits <- adat_ghits[,which(!is.na(colData(adat_ghits)$PathAD))]
-adat_ghits <- adat_ghits[,which(!is.na(colData(adat_ghits)$AT8_total))]
-colData(adat_ghits)$PathLBD <- as.integer(ifelse(colData(adat_ghits)$PathLBD == 2, 1, 0))
-genes <- data.frame(unique_names = rownames(rowData(adat_ghits)), genes = rowData(adat_ghits)$EntrezGeneSymbol)
-ghits_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + AT8_total + chii_g, data=colData(adat_ghits))
-ghits_res_all <- limma_model(ghits_model,adat_ghits, "chii_g_with_tau","chii_g",genes)
-significance_table[11,2] <- length(which(ghits_res_all$P.Value < 0.05))
-significance_table[11,3] <- length(which(ghits_res_all$adj.P.Val < 0.05))
-ghits_fgsea_res <- fgsea_function(ghits_res_all,C2_genesets,"chii_g_with_tau")
-significance_table[11,4] <- length(which(ghits_fgsea_res$pval < 0.05))
-significance_table[11,5] <- length(which(ghits_fgsea_res$padj < 0.05))
+significance_table[13,4] <- length(which(ghits_fgsea_res$pval < 0.05))
+significance_table[13,5] <- length(which(ghits_fgsea_res$padj < 0.05))
 
 significance_table %>%
   gt()

@@ -34,6 +34,25 @@ AT8min <- min(AT8, na.rm=T)
 colData(adat)$AT8_total <- log(colData(adat)$AT8_total + 0.002628708)
 colData(adat)$hitsperyear <- colData(adat)$chii_g / colData(adat)$totyrs
 
+#imputation check
+imputation_list <- c("npoldd","sleepcb","nppath6","PathMND","Year","Batch","npold"
+                     ,"nppath","nplbod","nptdpb","nptdpc","nptdpe","npftdtau","npcort",
+                     "npprog","npftdt5","npftdt9","npftdtdp","PathAD","PathLBD","PathFTD",
+                     "CTE","sleepact","suicide","sport","apoe_de","TMEM106B_dom","TMEM106B_invrec",
+                     "cod","csparCTE","rs1990622","rs3173615","race","npoldd1","npoldd3",
+                     "npold1","npold2","npold3","npold4","DementiaHx","ParknismHx",
+                     "nphemo","npavas","npwmr","nphipscl","npbraak","npneur","npadnc",
+                     "npdiff","npamy","nparter","CTEStage","Group","apoe","Group_de",
+                     "Core_ID", "SampleName","nppick", "npftdt2", "npftdt8", "npftdt10",
+                     "PathPrion", "micdorfront", "micinfpar", "micalc","npoldd2",
+                     "npoldd4","npoftd")
+metadata_list <- colnames(metadata)
+length(unique(imputation_list))
+length(unique(metadata_list))
+metadata_list[which(!metadata_list %in% imputation_list)]
+
+### Removing variables that do not vary in the dataset
+# cov_data_subset <- subset(cov_data, select=-c( nppick, npftdt2, npftdt8, npftdt10, PathPrion, micdorfront, micinfpar, micalc,npoldd2,npoldd4,npoftd))
 #FGG spot check
 protein_index <- which(rownames(adat) == "seq.4989.7")
 #ACHE spot check
