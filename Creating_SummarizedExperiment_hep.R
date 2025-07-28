@@ -16,12 +16,10 @@ library(ggfortify)
 adat <- SomaDataIO::read_adat("/restricted/projectnb/cteseq/data/somascan_2024/CTE Somascan/HMS-24-036_2024-08-09/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP.adat")
 adat_bbid <- fread("/restricted/projectnb/cteseq/projects/somascan/data/BBIDs_adatfile_LabadorfRotaiton_hp.csv")
 metadata <- readRDS("/restricted/projectnb/cteseq/projects/challenge-project-2024/merged_cte_meta.rds")
-dim(adat)
 adat <- log2(adat)
 analytes <- SomaDataIO::getAnalytes(adat)
 num_metadata <- length(adat) - length(analytes)
 analyte_start <- num_metadata+1
-dim(adat)
 
 #separate into parts
 #count data
@@ -33,9 +31,6 @@ dim(counts)
 #row data
 rdata <- as.data.frame(attributes(adat)$Col.Meta)
 rownames(rdata) <- attributes(adat)$names[analyte_start:length(adat)]
-dim(rdata)
-#rdata <- t(rdata)
-#dim(rdata)
 
 #column data
 cdata <- as.data.frame(adat[,1:num_metadata])
@@ -43,15 +38,13 @@ cdata.rownames <- rownames(cdata)
 #merge files together to get BBID for each sample
 cdata <- dplyr::left_join(cdata,adat_bbid,by=c("SampleGroup"="SampleGroup"))
 rownames(cdata) <- cdata.rownames
-cdata <- cdata[which(!is.na(cdata$BBID)),]
+#only keep samples with BBID
+cdata <- cdata[which(!is.na(cdata$BBID)),] #248->212
 #merge metadata into cdata
 cdata$Identifyer <- rownames(cdata)
-#cdata.rownames <- rownames(cdata)
-#index_rm <- which(!(cdata$BBID %in% metadata$SampleName) == TRUE)
-cdata <- dplyr::inner_join(cdata, metadata,by=c("BBID"="SampleName"))
-#cdata.rownames <- cdata.rownames[-c(index_rm)]
+#only keep samples with metadata
+cdata <- dplyr::inner_join(cdata, metadata,by=c("BBID"="SampleName")) #212->210
 rownames(cdata) <- cdata$Identifyer
-dim(cdata)
 
 #count data filtering
 counts <- counts[,which(colnames(counts)%in%rownames(cdata))]
@@ -84,12 +77,14 @@ dev.off()
 
 #added filtering
 adat_summarized_experiment <- adat_summarized_experiment[-grep("Internal Use Only", rowData(adat_summarized_experiment)$TargetFullName), ] #7313 (-283)
+#remove outliers from pca (210 samples to 207 samples)
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-39")]
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-122")]
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-84")]
 #remove non-human samples
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$Organism == "Human"),] #7301
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$EntrezGeneID != ""),] #7285
+#use the minimum AT8 total value to log normalize the AT8 column in metadata
 AT8 <- colData(adat_summarized_experiment)$AT8_total
 AT8 <- AT8[which(AT8 > 0)]
 AT8min <- min(AT8, na.rm=T)
