@@ -5,7 +5,6 @@
 
 #packages 
 library(dplyr)
-library(data.table)
 library(ggplot2)
 library(limma)
 library(SummarizedExperiment)
@@ -210,6 +209,7 @@ significance_table[5,5] <- length(which(CTE_fgsea_res$padj < 0.05))
 adat_CTEStage <- adat[,which(!is.na(colData(adat)$CTEStage))] #205
 adat_CTEStage <- adat_CTEStage[,which(!is.na(colData(adat_CTEStage)$PathAD))] #204
 colData(adat_CTEStage)$PathLBD <- as.integer(ifelse(colData(adat_CTEStage)$PathLBD == 2, 1, 0))
+adat_CTEStage_num <- adat_CTEStage
 colData(adat_CTEStage_num)$CTEStage <- as.numeric(colData(adat_CTEStage)$CTEStage)
 genes <- data.frame(unique_names = rownames(rowData(adat_CTEStage_num)), genes = rowData(adat_CTEStage_num)$EntrezGeneSymbol)
 CTEStage_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + CTEStage, data=colData(adat_CTEStage_num))
