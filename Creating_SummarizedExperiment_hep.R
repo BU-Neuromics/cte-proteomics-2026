@@ -46,6 +46,7 @@ rownames(cdata) <- cdata.rownames
 cdata <- cdata[which(!is.na(cdata$BBID)),] #248->212
 #merge metadata into cdata
 cdata$Identifyer <- rownames(cdata)
+which(!cdata$BBID %in% metadata$SampleName)
 #only keep samples with metadata
 cdata <- dplyr::inner_join(cdata, metadata,by=c("BBID"="SampleName")) #212->210
 rownames(cdata) <- cdata$Identifyer
@@ -74,6 +75,14 @@ rowData(adat_summarized_experiment)
 
 #pca plot (at n=212) = not merged with metadata yet
 pca_res <- prcomp(t(assays(adat_summarized_experiment)$counts), scale. = TRUE)
+scores <- as.data.frame(pca_res$x)
+z_pc1 <- scale(scores$PC1)
+z_pc2 <- scale(scores$PC2)
+
+outliers <- rownames(scores)[abs(z_pc1) > 3]
+outliers
+
+
 saveRDS(pca_res, file = "/restricted/projectnb/cteseq/projects/somascan/results/pcaplot_212samp_file.rds")
 png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/pcaplot_212samp.png'))
 autoplot(
@@ -99,6 +108,7 @@ adat_summarized_experiment <- adat_summarized_experiment[-grep("Internal Use Onl
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-39")]
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-122")]
 adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-84")]
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-580")]
 #remove non-human samples
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$Organism == "Human"),] #7301
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$EntrezGeneID != ""),] #7285
@@ -121,7 +131,7 @@ metadata_adat_m <- merge(metadata_adat,metadata_2, by.x = "BBID", by.y = "ID_new
 colData(adat_summarized_experiment) <- metadata_adat_m
 colData(adat_summarized_experiment)$PMI <- as.numeric(colData(adat_summarized_experiment)$PMI)
 colData(adat_summarized_experiment)$Group_de <- ifelse(colData(adat_summarized_experiment)$CTEStage == 0, 0, ifelse(colData(adat_summarized_experiment)$CTEStage == 1, 1,ifelse(colData(adat_summarized_experiment)$CTEStage == 2, 1,ifelse(colData(adat_summarized_experiment)$CTEStage == 3, 2,ifelse(colData(adat_summarized_experiment)$CTEStage == 4, 2,colData(adat_summarized_experiment)$Group_de)))))
-colData(adat_summarized_experiment)$Group_de[169] <- 1
+colData(adat_summarized_experiment)$Group_de[168] <- 1
 colData(adat_summarized_experiment)$Group_de <- as.numeric(colData(adat_summarized_experiment)$Group_de)
 #adat_summarized_experiment <- adat_summarized_experiment[,which(!is.na(colData(adat_summarized_experiment)$PMI))]
 saveRDS(adat_summarized_experiment, file = "/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")

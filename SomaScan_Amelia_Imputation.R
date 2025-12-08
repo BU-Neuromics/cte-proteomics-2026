@@ -67,7 +67,7 @@ dir.create(st.filepath)
 saveRDS(amelia.out1, file = paste(st.filepath,"/full_imputations.rds",sep=""))
 write.amelia(obj = amelia.out1, file.stem = paste(st.filepath,"/outdata",sep=""))
 
-amelia.out1 <- readRDS("/restricted/projectnb/cteseq/projects/somascan/imputation/Stable_Releases/2025-10-14/full_imputations.rds")
+amelia.out1 <- readRDS("/restricted/projectnb/cteseq/projects/somascan/imputation/Stable_Releases/2025-12-02/full_imputations.rds")
 compare.density(amelia.out1, "PMI")
 compare.density(amelia.out1, "totyrs")
 compare.density(amelia.out1, "AT8_total")
