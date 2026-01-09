@@ -69,25 +69,28 @@ limma_model <- function(model,adat, name, coefficient,genes) {
   #png(filename=paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/volcano_plots/PMI_imp1/limma_DEA_',name,'_noF_volcanoplot.png'))
   #volcanoplot(elimma,coef=coefficient,highlight=20,names=fit$genes, col="red",main=name)
   #dev.off()
-  p_cutoff <- 0.05
-  fc_cutoff <- 0.05  # visual threshold you mentioned
+  p_cutoff       <- 0.05
+  lfc_sig_cutoff <- 1      # used ONLY for significance
+  xlim_fc        <- 1.5
   
   # compute -log10 pvalue for y-axis
   limma_res_all_coef <- limma_res_all_coef %>%
     mutate(
       negLogP = -log10(P.Value),
       Significance = case_when(
-        P.Value <= p_cutoff & abs(logFC) >= fc_cutoff ~ "p<0.05 & |logFC|>=1",
+        P.Value <= p_cutoff & abs(logFC) >= lfc_sig_cutoff ~ "p<0.05 & |logFC|>=1",
         P.Value <= p_cutoff ~ "p<0.05",
         TRUE ~ "not-significant"
       )
     )
   
   # pick top 10 most significant genes (by P.Value)
-  top10_genes <- limma_res_all_coef %>%
+  top10_unique <- limma_res_all_coef %>%
     arrange(P.Value) %>%
-    slice_head(n = 10) %>%
-    pull(genes)
+    distinct(unique_names, .keep_all = TRUE) %>%  # ensure uniqueness
+    slice_head(n = 10)
+  top10_label_df <- top10_unique %>%
+    select(unique_names, genes)
   
   # base plot
   p <- ggplot(limma_res_all_coef, aes(x = logFC, y = negLogP)) +
@@ -100,25 +103,26 @@ limma_model <- function(model,adat, name, coefficient,genes) {
     theme_minimal(base_size = 20) +
     labs(
       x = "log2 Fold Change",
-      y = "-log10(P.Value)",
-      caption = paste0("Total genes = ", nrow(limma_res_all_coef),
-                       ", p-cutoff = ", p_cutoff)
+      y = "-log10(P.Value)"
     ) +
     # vertical lines showing your lfc cutoffs for visual reference
-    geom_vline(xintercept = c(-fc_cutoff, fc_cutoff), linetype = "dashed", color = "darkgrey") +
+    geom_vline(xintercept = c(-lfc_sig_cutoff, lfc_sig_cutoff), linetype = "dashed", color = "darkgrey") +
     geom_hline(yintercept = -log10(p_cutoff), linetype = "dashed", color = "darkgrey")
-  
+  p <- p +
+    coord_cartesian(xlim = c(-xlim_fc, xlim_fc))
   # add labels for top10, with segments (connectors)
-  vplot <- p + geom_text_repel(
-    data = limma_res_all_coef %>% filter(genes %in% top10_genes),
-    aes(label = genes),
-    size = 3.5,
-    max.overlaps = Inf,
-    box.padding = 0.3,
-    point.padding = 0.2,
-    segment.size = 0.5,
-    segment.color = "grey40"
-  )
+  vplot <- p +
+    geom_text_repel(
+      data = limma_res_all_coef %>%
+        semi_join(top10_unique, by = "unique_names"),
+      aes(label = genes),
+      size = 3.5,
+      max.overlaps = Inf,
+      box.padding = 0.3,
+      point.padding = 0.2,
+      segment.size = 0.5,
+      segment.color = "grey40"
+    )
   ggsave(paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/volcano_plots/PMI_imp1/limma_DEA_',name,'_ggplot_volcanoplot.png'), plot = vplot, width = 10, height = 6)
   saveRDS(vplot, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/volcano_plots/PMI_imp1/limma_DEA_',name,'_ggplot_volcanoplot.rds'))
   write.csv(limma_res_all_coef, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/limma_DEA_',name,'_noF_results_coef.csv'))
@@ -177,18 +181,17 @@ fgsea_function <- function(limma_res_all,C2_genesets,name){
   return(fgseaRes)
 }
 
-significance_table <- matrix(data=NA,nrow = 7,ncol = 5)
+significance_table <- matrix(data=NA,nrow = 6,ncol = 5)
 significance_table <- as.data.frame(significance_table)
 colnames(significance_table) <- c("Model","Nominal Significant Proteins",
                                   "Adjusted Significant Proteins","Nominal Significant Pathways",
                                   "Adjusted Significant Pathways")
 significance_table$Model <- c("AT8 Total", "Total Years of Play", "RHI to Low CTE", 
                               "RHI to High CTE", "Cognitive Difficulty Score Total", 
-                              "Dementia", "Functional Activities Questionnaire Total")
-significance_table
+                              "Dementia")
 
-#`~ age_at_death + PathAD + PathLBD + PathFTD + AT8_total`
-adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #181
+#AT8 total model
+adat_AT8 <- adat[,which(!is.na(colData(adat)$AT8_total))] #180
 dim(adat_AT8)
 genes <- data.frame(unique_names = rownames(rowData(adat_AT8)), genes = rowData(adat_AT8)$EntrezGeneSymbol)
 AT8_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + AT8_total, data=colData(adat_AT8))
@@ -199,8 +202,8 @@ AT8_fgsea_res <- fgsea_function(AT8_res_all,C2_genesets,"AT8_total")
 significance_table[1,4] <- length(which(AT8_fgsea_res$pval < 0.05))
 significance_table[1,5] <- length(which(AT8_fgsea_res$padj < 0.05))
 
-#`~ age_at_death + PathAD + PathLBD + PathFT + totyrs`
-adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))] #195
+#Total Years of Play model
+adat_totyrs <- adat[,which(!is.na(colData(adat)$totyrs))] #194
 dim(adat_totyrs)
 genes <- data.frame(unique_names = rownames(rowData(adat_totyrs)), genes = rowData(adat_totyrs)$EntrezGeneSymbol)
 totyrs_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + totyrs, data=colData(adat_totyrs))
@@ -211,47 +214,9 @@ totyrs_fgsea_res <- fgsea_function(totyrs_res_all,C2_genesets,"totyrs")
 significance_table[2,4] <- length(which(totyrs_fgsea_res$pval < 0.05))
 significance_table[2,5] <- length(which(totyrs_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + CTELowvsHigh
-adat_highlow <- adat[,which(!(colData(adat)$Group_de) == 0)] #147
-dim(adat_highlow)
-colData(adat_highlow)$Group_de <- factor(colData(adat_highlow)$Group_de, levels = c(1,2))
-genes <- data.frame(unique_names = rownames(rowData(adat_highlow)), genes = rowData(adat_highlow)$EntrezGeneSymbol)
-CTE_lowvshigh_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + Group_de, data=colData(adat_highlow))
-CTE_lowvshigh_res_all <- limma_model(CTE_lowvshigh_model,adat_highlow, "CTE_lowvshigh","Group_de2",genes)
-CTE_lowvshigh_fgsea_res <- fgsea_function(CTE_lowvshigh_res_all,C2_genesets,"CTE_lowvshigh")
-
-#RHI vs Stages
-#stage 1
-adat_rhi1 <- adat[,which(!(colData(adat)$CTEStage) == 4 & !(colData(adat)$CTEStage) == 2 & !(colData(adat)$CTEStage) == 3)] #71
-colData(adat_rhi1)$CTEStage <- factor(colData(adat_rhi1)$CTEStage, levels = c(0,1))
-genes <- data.frame(unique_names = rownames(rowData(adat_rhi1)), genes = rowData(adat_rhi1)$EntrezGeneSymbol)
-CTE_rhi1_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + CTEStage, data=colData(adat_rhi1))
-CTE_rhi1_res_all <- limma_model(CTE_rhi1_model,adat_rhi1, "CTE_RHI1","CTEStage1",genes)
-CTE_rhi1_fgsea_res <- fgsea_function(CTE_rhi1_res_all,C2_genesets,"CTE_RHI1")
-#stage 2
-adat_rhi2 <- adat[,which(!(colData(adat)$CTEStage) == 1 & !(colData(adat)$CTEStage) == 4 & !(colData(adat)$CTEStage) == 3)] #77
-colData(adat_rhi2)$CTEStage <- factor(colData(adat_rhi2)$CTEStage, levels = c(0,2))
-genes <- data.frame(unique_names = rownames(rowData(adat_rhi2)), genes = rowData(adat_rhi2)$EntrezGeneSymbol)
-CTE_rhi2_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + CTEStage, data=colData(adat_rhi2))
-CTE_rhi2_res_all <- limma_model(CTE_rhi2_model,adat_rhi2, "CTE_RHI2","CTEStage2",genes)
-CTE_rhi2_fgsea_res <- fgsea_function(CTE_rhi2_res_all,C2_genesets,"CTE_RHI2")
-#stage 3
-adat_rhi3 <- adat[,which(!(colData(adat)$CTEStage) == 1 & !(colData(adat)$CTEStage) == 2 & !(colData(adat)$CTEStage) == 4)] #105
-colData(adat_rhi3)$CTEStage <- factor(colData(adat_rhi3)$CTEStage, levels = c(0,3))
-genes <- data.frame(unique_names = rownames(rowData(adat_rhi3)), genes = rowData(adat_rhi3)$EntrezGeneSymbol)
-CTE_rhi3_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + CTEStage, data=colData(adat_rhi3))
-CTE_rhi3_res_all <- limma_model(CTE_rhi3_model,adat_rhi3, "CTE_RHI3","CTEStage3",genes)
-CTE_rhi3_fgsea_res <- fgsea_function(CTE_rhi3_res_all,C2_genesets,"CTE_RHI3")
-#stage 4
-adat_rhi4 <- adat[,which(!(colData(adat)$CTEStage) == 1 & !(colData(adat)$CTEStage) == 2 & !(colData(adat)$CTEStage) == 3)] #125
-colData(adat_rhi4)$CTEStage <- factor(colData(adat_rhi4)$CTEStage, levels = c(0,4))
-genes <- data.frame(unique_names = rownames(rowData(adat_rhi4)), genes = rowData(adat_rhi4)$EntrezGeneSymbol)
-CTE_rhi4_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + CTEStage, data=colData(adat_rhi4))
-CTE_rhi4_res_all <- limma_model(CTE_rhi4_model,adat_rhi4, "CTE_RHI4","CTEStage4",genes)
-CTE_rhi4_fgsea_res <- fgsea_function(CTE_rhi4_res_all,C2_genesets,"CTE_RHI4")
-
-#RHI vs High CTE
-adat_highrhi <- adat[,which(!(colData(adat)$Group_de) == 1)] #172
+#RHI vs High CTE model
+adat_highrhi <- adat[,which(!(colData(adat)$Group_de) == 1)] #171
+dim(adat_highrhi)
 colData(adat_highrhi)$Group_de <- factor(colData(adat_highrhi)$Group_de)
 genes <- data.frame(unique_names = rownames(rowData(adat_highrhi)), genes = rowData(adat_highrhi)$EntrezGeneSymbol)
 CTE_rhivshigh_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + Group_de, data=colData(adat_highrhi))
@@ -262,8 +227,9 @@ CTE_rhivshigh_fgsea_res <- fgsea_function(CTE_rhivshigh_res_all,C2_genesets,"CTE
 significance_table[4,4] <- length(which(CTE_rhivshigh_fgsea_res$pval < 0.05))
 significance_table[4,5] <- length(which(CTE_rhivshigh_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + CTERHIvslow
+#RHI vs Low CTE model
 adat_RHIlow <- adat[,which(!(colData(adat)$Group_de) == 2)] #91
+dim(adat_RHIlow)
 colData(adat_RHIlow)$Group_de <- factor(colData(adat_RHIlow)$Group_de)
 genes <- data.frame(unique_names = rownames(rowData(adat_RHIlow)), genes = rowData(adat_RHIlow)$EntrezGeneSymbol)
 CTE_RHIvslow_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + Group_de, data=colData(adat_RHIlow))
@@ -274,8 +240,9 @@ CTE_RHIvslow_fgsea_res <- fgsea_function(CTE_RHIvslow_res_all,C2_genesets,"CTE_R
 significance_table[3,4] <- length(which(CTE_RHIvslow_fgsea_res$pval < 0.05))
 significance_table[3,5] <- length(which(CTE_RHIvslow_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + CDStot
-adat_cds <- adat[,which(!is.na(colData(adat)$CDStot))] #133
+#CDStot model
+adat_cds <- adat[,which(!is.na(colData(adat)$CDStot))] #132
+dim(adat_cds)
 genes <- data.frame(unique_names = rownames(rowData(adat_cds)), genes = rowData(adat_cds)$EntrezGeneSymbol)
 cds_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + CDStot, data=colData(adat_cds))
 cds_res_all <- limma_model(cds_model,adat_cds, "CDStot","CDStot",genes)
@@ -285,8 +252,9 @@ cds_fgsea_res <- fgsea_function(cds_res_all,C2_genesets,"CDStot")
 significance_table[5,4] <- length(which(cds_fgsea_res$pval < 0.05))
 significance_table[5,5] <- length(which(cds_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + Dementia
-adat_dementia <- adat[,which(!is.na(colData(adat)$DementiaHx))] #205
+#Dementia model
+adat_dementia <- adat[,which(!is.na(colData(adat)$DementiaHx))] #204
+dim(adat_dementia)
 genes <- data.frame(unique_names = rownames(rowData(adat_dementia)), genes = rowData(adat_dementia)$EntrezGeneSymbol)
 dementia_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + DementiaHx, data=colData(adat_dementia))
 dementia_res_all <- limma_model(dementia_model,adat_dementia, "DementiaHx","DementiaHx1",genes)
@@ -296,83 +264,73 @@ dementia_fgsea_res <- fgsea_function(dementia_res_all,C2_genesets,"DementiaHx")
 significance_table[6,4] <- length(which(dementia_fgsea_res$pval < 0.05))
 significance_table[6,5] <- length(which(dementia_fgsea_res$padj < 0.05))
 
-#~ age_at_death + PathAD + PathLBD + PathFTD + faqtot
-adat_faq <- adat[,which(!is.na(colData(adat)$faqtot))] #179
-genes <- data.frame(unique_names = rownames(rowData(adat_faq)), genes = rowData(adat_faq)$EntrezGeneSymbol)
-faq_model <- model.matrix(~ agedeath + PathAD + PathLBD + PathFTD + PMI + faqtot, data=colData(adat_faq))
-faq_res_all <- limma_model(faq_model,adat_faq, "faqtot","faqtot",genes)
-significance_table[7,2] <- length(which(faq_res_all$P.Value < 0.05))
-significance_table[7,3] <- length(which(faq_res_all$adj.P.Val < 0.05))
-faq_fgsea_res <- fgsea_function(faq_res_all,C2_genesets,"faqtot")
-significance_table[7,4] <- length(which(faq_fgsea_res$pval < 0.05))
-significance_table[7,5] <- length(which(faq_fgsea_res$padj < 0.05))
-
 #number of samples included in each model
-num_table <- matrix(data=NA,nrow = 7,ncol = 2)
+num_table <- matrix(data=NA,nrow = 6,ncol = 2)
 num_table <- as.data.frame(num_table)
-colnames(num_table) <- c("Model","Number of Samples Included Out of 205")
+colnames(num_table) <- c("Model","Number of Samples Included Out of 204")
 num_table$Model <- c("AT8 Total", "Total Years of Play", "RHI to Low CTE", 
                      "RHI to High CTE", "Cognitive Difficulty Score Total", 
-                     "Dementia", "Functional Activities Questionnaire Total")
+                     "Dementia")
 model_list <- list(adat_AT8, adat_totyrs, adat_RHIlow, adat_highrhi, adat_cds, 
-                   adat_dementia, adat_faq)
+                   adat_dementia)
 for (i in 1:nrow(num_table)){
-  num_table$'Number of Samples Included Out of 205'[i] <- ncol(model_list[[i]])
+  num_table$'Number of Samples Included Out of 204'[i] <- ncol(model_list[[i]])
 }
 
 final_table <- cbind(
   Model = significance_table$Model,
-  'Number of Samples Included Out of 204' = num_table$'Number of Samples Included Out of 205',
+  'Number of Samples Included Out of 204' = num_table$'Number of Samples Included Out of 204',
   significance_table[, c(2,4:ncol(significance_table))] # Columns from the target index onwards
 )
-final_table <- final_table[-nrow(final_table), ]
-final_table %>%
+sig_table <- final_table %>%
   gt()
-gtsave(sig_table, "/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/significant_limma_Proteins_Pathways_shortenedtable_noF.png")
-gtsave(sig_table, "/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/significant_limma_Proteins_Pathways_shortenedtable_noF.html")
-write.csv(significance_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/significant_limma_Proteins_Pathways_shortenedtable_noF.csv'))
+sig_table
+write.csv(sig_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/limma_model_maintable_noF.csv'))
 
-#Stage 1 - 9
-#Stage 2 - 18
-#Stage 3 - 42
-#Stage 4 - 56
-#RHI - 54
+##combine results into one file##
 
-#full table
-num_table <- matrix(data=NA,nrow = 12,ncol = 2)
-num_table <- as.data.frame(num_table)
-colnames(num_table) <- c("Model","Number of Samples Included Out of 205")
-num_table$Model <- c("AT8 Total", "Total Years of Play", "RHI to Low CTE", 
-                     "RHI to High CTE", "Cognitive Difficulty Score Total", 
-                     "Dementia", "Functional Activities Questionnaire Total", 
-                     "RHI vs Stage 1", "RHI vs Stage 2", "RHI vs Stage 3", 
-                     "RHI vs Stage 4", "CTE low vs CTE high")
-model_list <- list(adat_AT8, adat_totyrs, adat_RHIlow, adat_highrhi, adat_cds, 
-                   adat_dementia, adat_faq, adat_rhi1, adat_rhi2, adat_rhi3, 
-                   adat_rhi4, adat_highlow)
-for (i in 1:nrow(num_table)){
-  num_table$'Number of Samples Included Out of 205'[i] <- ncol(model_list[[i]])
-}
+#main models combined limma file
+CTE_RHIvslow_res_all <- as.data.table(CTE_RHIvslow_res_all)
+CTE_RHIvslow_res_all <- CTE_RHIvslow_res_all[, model := "lowCTE"]
+CTE_rhivshigh_res_all <- as.data.table(CTE_rhivshigh_res_all)
+CTE_rhivshigh_res_all <- CTE_rhivshigh_res_all[, model := "highCTE"]
+AT8_res_all <- as.data.table(AT8_res_all)
+AT8_res_all <- AT8_res_all[, model := "AT8_total"]
+totyrs_res_all <- as.data.table(totyrs_res_all)
+totyrs_res_all <- totyrs_res_all[, model := "totyrs"]
+cds_res_all <- as.data.table(cds_res_all)
+cds_res_all <- cds_res_all[, model := "CDS_total"]
+dementia_res_all <- as.data.table(dementia_res_all)
+dementia_res_all <- dementia_res_all[, model := "dementia"]
+combined_limma <- rbindlist(list(CTE_RHIvslow_res_all,CTE_rhivshigh_res_all,AT8_res_all,totyrs_res_all,cds_res_all,dementia_res_all), use.names = TRUE, fill = TRUE)
+write.csv(combined_limma, "/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/combined_limma_mainmodels.csv")
 
-final_table <- rbind(num_table,significance_table)
-num_table <- num_table %>%
-  gt()
-write.csv(num_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/limma_model_num_samps_fulltable_noF.csv'))
-gt_two_column_layout(list(sum_table, sig_table))
-#main model table
-num_table <- matrix(data=NA,nrow = 7,ncol = 2)
-num_table <- as.data.frame(num_table)
-colnames(num_table) <- c("Model","Number of Samples Included Out of 205")
-num_table$Model <- c("AT8 Total", "Total Years of Play", "RHI to Low CTE", 
-                     "RHI to High CTE", "Cognitive Difficulty Score Total", 
-                     "Dementia", "Functional Activities Questionnaire Total")
-model_list <- list(adat_AT8, adat_totyrs, adat_RHIlow, adat_highrhi, adat_cds, 
-                   adat_dementia, adat_faq)
-for (i in 1:nrow(num_table)){
-  num_table$'Number of Samples Included Out of 205'[i] <- ncol(model_list[[i]])
-}
-num_table %>%
-  gt()
-write.csv(num_table, paste0('/restricted/projectnb/cteseq/projects/somascan/results/limma/limma_results/PMI_imp1/limma_model_num_samps_maintable_noF.csv'))
+#main models combined fgsea file
+CTE_RHIvslow_fgsea_res <- as.data.table(CTE_RHIvslow_fgsea_res)
+CTE_RHIvslow_fgsea_res <- CTE_RHIvslow_fgsea_res[, model := "lowCTE"]
 
+CTE_rhivshigh_fgsea_res <- as.data.table(CTE_rhivshigh_fgsea_res)
+CTE_rhivshigh_fgsea_res <- CTE_rhivshigh_fgsea_res[, model := "highCTE"]
+
+totyrs_fgsea_res <- as.data.table(totyrs_fgsea_res)
+totyrs_fgsea_res <- totyrs_fgsea_res[, model := "totyrs"]
+
+AT8_fgsea_res <- as.data.table(AT8_fgsea_res)
+AT8_fgsea_res <- AT8_fgsea_res[, model := "AT8_total"]
+
+cds_fgsea_res <- as.data.table(cds_fgsea_res)
+cds_fgsea_res <- cds_fgsea_res[, model := "CDS_total"]
+
+dementia_fgsea_res <- as.data.table(dementia_fgsea_res)
+dementia_fgsea_res <- dementia_fgsea_res[, model := "dementia"]
+
+combined_fgsea <- rbindlist(list(CTE_RHIvslow_fgsea_res,CTE_rhivshigh_fgsea_res,AT8_fgsea_res,totyrs_fgsea_res,cds_fgsea_res,dementia_fgsea_res), use.names = TRUE, fill = TRUE)
+combined_fgsea_clean <- combined_fgsea[, lapply(.SD, function(x) {
+  if (is.list(x)) {
+    sapply(x, function(y) paste(y, collapse = ","))
+  } else {
+    x
+  }
+})]
+write.csv(combined_fgsea_clean, "/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/combined_fgsea_mainmodels.csv")
 

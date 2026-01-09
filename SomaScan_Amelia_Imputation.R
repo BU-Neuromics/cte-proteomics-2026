@@ -21,6 +21,8 @@ library(Amelia)
 filepath <- "/restricted/projectnb/cteseq/projects/somascan/imputation"
 adat <- readRDS("/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")
 col_data <- as.data.frame(colData(adat))
+
+#removing variables (Amelia can only handle a few features for the number of samples we have)
 col_data_filt <- subset(col_data, select = -c(PlateId,ScannerID,PlatePosition,SlideId,Subarray,SampleId,PlateRunDate,Group,
                                               SampleType,PercentDilution,SampleMatrix,Barcode,Barcode2d,SampleName,SampleNotes,AliquotingNotes,
                                               SampleDescription,AssayNotes,TimePoint,ExtIdentifier,SsfExtId,SampleGroup,SiteId,SubjectID,CLI,
@@ -29,19 +31,27 @@ col_data_filt <- subset(col_data, select = -c(PlateId,ScannerID,PlatePosition,Sl
                                               npoldd,npoldd1,npoldd2,npoldd3,npoldd4,nparter,nppath,nppath6,nplbod,nptdpb,nptdpc,nptdpe,npftdtau,
                                               nppick,npftdt2,npcort,npprog,npftdt5,npftdt8,npftdt9,npftdt10,npftdtdp,npoftd,PathPrion, micdorfront, 
                                               micinfpar, micalc, PathMND,suicide,TMEM106B_dom,TMEM106B_invrec,disdur))
+#filter out features with more than 30 na values
+#save cds to add back in because we need it for the model
 colSums(is.na(col_data_filt))
 cds <- col_data_filt$CDStot
 max_nas <- 30
 col_data_filt <- col_data_filt[, colSums(is.na(col_data_filt)) <= max_nas]
 col_data_filt$CDStot <- cds
 
+#nominal variables
 noms=c("DementiaHx","ParknismHx","PathAD","PathLBD","PathFTD","CTE",
        "sport","apoe_de","cod","csparCTE","rs1990622","rs3173615","race")
 
+#ordinal variables
 ords=c("CTEStage","apoe","Group_de")
 
+#identification variables
 idvars=c("BBID", "SOMASCAN.ID")
+
+#prep
 cov_data_subset_clean <- remove_all_labels(col_data_filt)
+
 # Run imputation
 amelia.out1 <- amelia(
   cov_data_subset_clean, 
@@ -55,22 +65,15 @@ amelia.out1 <- amelia(
   parallel = "multicore"
   # ncpus = 30
 )
-compare.density(amelia.out1, "PMI")
-compare.density(amelia.out1, "totyrs")
-compare.density(amelia.out1, "AT8_total")
-compare.density(amelia.out1, "CDStot")
-compare.density(amelia.out1, "DementiaHx")
-compare.density(amelia.out1, "faqtot")
 
+#create file path and save imputation results
 st.filepath <- paste(filepath,"/Stable_Releases/",Sys.Date(),sep="")
 dir.create(st.filepath)
 saveRDS(amelia.out1, file = paste(st.filepath,"/full_imputations.rds",sep=""))
 write.amelia(obj = amelia.out1, file.stem = paste(st.filepath,"/outdata",sep=""))
 
 amelia.out1 <- readRDS("/restricted/projectnb/cteseq/projects/somascan/imputation/Stable_Releases/2025-12-02/full_imputations.rds")
+
+#plot to evaluate immputation (can insert any feature)
 compare.density(amelia.out1, "PMI")
 compare.density(amelia.out1, "totyrs")
-compare.density(amelia.out1, "AT8_total")
-compare.density(amelia.out1, "CDStot")
-compare.density(amelia.out1, "DementiaHx")
-compare.density(amelia.out1, "faqtot")

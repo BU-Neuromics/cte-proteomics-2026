@@ -105,33 +105,29 @@ dev.off()
 #added filtering
 adat_summarized_experiment <- adat_summarized_experiment[-grep("Internal Use Only", rowData(adat_summarized_experiment)$TargetFullName), ] #7313 (-283)
 #remove outliers from pca (210 samples to 207 samples)
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-39")]
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-122")]
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-84")]
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-580")]
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-39")] #209
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-122")] #208
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-84")] #207
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$SampleGroup != "K-580")] #206
 #remove non-human samples
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$Organism == "Human"),] #7301
 adat_summarized_experiment <- adat_summarized_experiment[which(rowData(adat_summarized_experiment)$EntrezGeneID != ""),] #7285
 colData(adat_summarized_experiment)$PathLBD <- as.integer(ifelse(colData(adat_summarized_experiment)$PathLBD == 2, 1, 0)) 
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$BBID != "K-0666")] #206
-adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$BBID != "SLI-171")] #205
-#adat_summarized_experiment <- adat_summarized_experiment[,which(!is.na(colData(adat_summarized_experiment)$PathAD))] #204
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$BBID != "K-0666")] #205
+adat_summarized_experiment <- adat_summarized_experiment[,which(colData(adat_summarized_experiment)$BBID != "SLI-171")] #204
 #use the minimum AT8 total value to log normalize the AT8 column in metadata
 AT8 <- colData(adat_summarized_experiment)$AT8_total
 AT8 <- AT8[which(AT8 > 0)]
 AT8min <- min(AT8, na.rm=T)
-colData(adat_summarized_experiment)$AT8_total <- log(colData(adat_summarized_experiment)$AT8_total + 0.002628708)
+colData(adat_summarized_experiment)$AT8_total <- log(colData(adat_summarized_experiment)$AT8_total + AT8min)
 
 #investigating metadata
 metadata_adat <- colData(adat_summarized_experiment)
 metadata_adat$BBID[c(11, 19, 23, 30, 39, 49, 59, 69)] <- c("SLI-016", "SLI-020", "SLI-096", "SLI-023", "SLI-073", "SLI-079", "SLI-084", "SLI-085")
-head(metadata_2)
-#metadata_2 <- metadata_2[which(metadata_2$ID_new %in% metadata_adat$BBID),]
 metadata_adat_m <- merge(metadata_adat,metadata_2, by.x = "BBID", by.y = "ID_new")
 colData(adat_summarized_experiment) <- metadata_adat_m
 colData(adat_summarized_experiment)$PMI <- as.numeric(colData(adat_summarized_experiment)$PMI)
 colData(adat_summarized_experiment)$Group_de <- ifelse(colData(adat_summarized_experiment)$CTEStage == 0, 0, ifelse(colData(adat_summarized_experiment)$CTEStage == 1, 1,ifelse(colData(adat_summarized_experiment)$CTEStage == 2, 1,ifelse(colData(adat_summarized_experiment)$CTEStage == 3, 2,ifelse(colData(adat_summarized_experiment)$CTEStage == 4, 2,colData(adat_summarized_experiment)$Group_de)))))
 colData(adat_summarized_experiment)$Group_de[168] <- 1
 colData(adat_summarized_experiment)$Group_de <- as.numeric(colData(adat_summarized_experiment)$Group_de)
-#adat_summarized_experiment <- adat_summarized_experiment[,which(!is.na(colData(adat_summarized_experiment)$PMI))]
 saveRDS(adat_summarized_experiment, file = "/restricted/projectnb/cteseq/projects/somascan/data/HMS-24-036_v4.1_other.hybNorm.medNormInt.plateScale.medNormSMP_summarizedexperiment.rds")

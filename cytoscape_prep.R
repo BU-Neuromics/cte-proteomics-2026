@@ -13,8 +13,8 @@ library(leiden)
 reticulate::py_install("numpy")
 reticulate::py_install("leidenalg")
 
-combined_fgsea <- fread("/restricted/projectnb/cteseq/projects/somascan/final_plots/combined_fgsea_mainmodels.csv")
-cluster_df <- fread("/restricted/projectnb/cteseq/projects/somascan/final_plots/clustered_fgsea_using_function_nofaq_withproteins_groupnames.csv")
+combined_fgsea <- fread("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/combined_fgsea_mainmodels_sigonly.csv")
+cluster_df <- fread("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/clustered_fgsea_using_function_nofaq_withproteins_grouped.csv")
 
 ##################################################################################
 #Cytoscape Prep Based on hierarchical clustering (cosine)
@@ -56,7 +56,7 @@ diag(cos_sim_thresh) <- 0
 
 # 4. Add to node metadata
 cluster_df_h <- cluster_df %>% 
-  select(pathway, Group)
+  select(pathway, group)
 colnames(cluster_df_h) <- c("id","cluster_h")
 m <- as.matrix(cos_sim_thresh)
 # 3 Get upper triangle only to avoid duplicate source-target and reverse
@@ -103,5 +103,5 @@ nes_info <- nes_info %>% select(id,direction)
 nodes_df <- nodes_df %>%
   left_join(nes_info, by = "id")
 
-write.csv(edges, "/restricted/projectnb/cteseq/projects/somascan/final_plots/hierarchical_clustering_network_edges_thresh02.csv", row.names = FALSE, quote = FALSE)
-write.csv(nodes_df, "/restricted/projectnb/cteseq/projects/somascan/final_plots/hierarchical_clustering_network_nodes_nothresh02.csv", row.names = FALSE, quote = FALSE)
+write.csv(edges, "/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/hierarchical_clustering_network_edges_thresh02_825.csv", row.names = FALSE, quote = FALSE)
+write.csv(nodes_df, "/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/final_files/hierarchical_clustering_network_nodes_nothresh02_825.csv", row.names = FALSE, quote = FALSE)

@@ -14,16 +14,17 @@ vol_dem <- readRDS("/restricted/projectnb/cteseq/projects/somascan/results/limma
 vol_cds <- readRDS("/restricted/projectnb/cteseq/projects/somascan/results/limma/volcano_plots/PMI_imp1/limma_DEA_CDStot_ggplot_volcanoplot.rds")
 
 #leading edge
-le_cte <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_leading_edge_plots/CTE_main_models_leading_edge.rds")
-le_AT8_totyrs <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_leading_edge_plots/AT8_main_totyrs_leading_edge.rds")
-le_totyrs_AT8 <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_leading_edge_plots/totyrs_main_AT8_leading_edge.rds")
-le_dem_cds <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_leading_edge_plots/dementia_main_cds_leading_edge.rds")
-le_cds_dem <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_leading_edge_plots/cds_main_dementia_leading_edge.rds")
+le_lowCTE <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/lowCTE_leading_edge.rds")
+le_highCTE <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/highCTE_leading_edge.rds")
+le_AT8 <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/AT8_total_leading_edge.rds")
+le_totyrs <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/totyrs_leading_edge.rds")
+le_dem <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/Dementia_leading_edge.rds")
+le_cds <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_leading_edge_plots/CDS_leading_edge.rds")
 
 #fgsea_comp
-fgsea_cte <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_fgsea_comp_plots/CTE_main_models_fgsea_comp.rds")
-fgsea_AT8_totyrs <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_fgsea_comp_plots/AT8_totyrs_fgsea_comp.rds")
-fgsea_dem_cds <- readRDS("/restricted/projectnb/cteseq/projects/somascan/final_plots/publication_ready_fgsea_comp_plots/CDS_dementia_fgsea_comp.rds")
+fgsea_cte <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_fgsea_comp_plots/CTE_main_models_fgsea_comp.rds")
+fgsea_AT8_totyrs <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_fgsea_comp_plots/AT8_totyrs_fgsea_comp.rds")
+fgsea_dem_cds <- readRDS("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/publication_ready_fgsea_comp_plots/CDS_dementia_fgsea_comp.rds")
 
 #Figure 1
 tag_theme <- theme(
@@ -34,14 +35,14 @@ tag_theme <- theme(
 )
 
 fig1 <- (
-  (vol_AT8 | vol_totyrs) /
-    le_AT8_totyrs /
-    le_totyrs_AT8 /
-    fgsea_AT8_totyrs
+  (vol_low | vol_high) /
+    le_lowCTE /
+    le_highCTE /
+    fgsea_cte
 ) +
   plot_annotation(tag_levels = "A") &
   tag_theme
-pdf("/restricted/projectnb/cteseq/projects/somascan/final_plots/Patchworks/patchwork_output_fig1.pdf", width = 20, height = 20)
+png("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/Patchworks/patchwork_output_fig1.png", width = 20, height = 20,units = "in",res = 300)
 print(fig1)
 dev.off()
 
@@ -54,13 +55,14 @@ tag_theme <- theme(
 )
 
 fig2 <- (
-  (vol_low | vol_high) /
-    le_cte /
-    fgsea_cte
+  (vol_AT8 | vol_totyrs) /
+    le_AT8 /
+    le_totyrs /
+    fgsea_AT8_totyrs
 ) +
   plot_annotation(tag_levels = "A") &
   tag_theme
-pdf("/restricted/projectnb/cteseq/projects/somascan/final_plots/Patchworks/patchwork_output_fig2.pdf", width = 20, height = 20)
+png("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/Patchworks/patchwork_output_fig2.png", width = 20, height = 20,units = "in",res = 300)
 print(fig2)
 dev.off()
 
@@ -74,13 +76,13 @@ tag_theme <- theme(
 
 fig3 <- (
   (vol_dem | vol_cds) /
-    le_dem_cds /
-    le_cds_dem/
+    le_dem /
+    le_cds/
     fgsea_dem_cds
 ) +
   plot_annotation(tag_levels = "A") &
   tag_theme
-pdf("/restricted/projectnb/cteseq/projects/somascan/final_plots/Patchworks/patchwork_output_fig3.pdf", width = 20, height = 20)
+png("/restricted/projectnb/cteseq/projects/somascan/proteomics_paper/Patchworks/patchwork_output_fig3.png", width = 20,height = 20,units = "in",res = 300)
 print(fig3)
 dev.off()
 
